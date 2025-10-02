@@ -56,7 +56,7 @@ This document outlines the multi-agent orchestration system for analyzing League
 
 ---
 
-### 2. ChampionsAgent 🏆
+### 2. ChampionAgent 🏆
 
 **Purpose**: Analyze champion mastery, performance patterns, and pool optimization
 
@@ -334,7 +334,7 @@ SupervisorAgent
 ```
 For each match in match_history[]:
 ├── BuildAgent.analyze(match_data, timeline_data)
-├── ChampionsAgent.analyze(match_data, mastery_data)  
+├── ChampionAgent.analyze(match_data, mastery_data)  
 ├── EconomyAgent.analyze(match_data, timeline_data)
 ├── CombatAgent.analyze(match_data, timeline_data)
 ├── VisionAgent.analyze(match_data, timeline_data)
@@ -393,7 +393,7 @@ NarrativeAgent.generate_recap():
     },
     "detailed_analysis": {
       "build_analysis": "BuildAgent.output",
-      "champion_analysis": "ChampionsAgent.output", 
+      "champion_analysis": "ChampionAgent.output", 
       "economy_analysis": "EconomyAgent.output",
       "combat_analysis": "CombatAgent.output",
       "vision_analysis": "VisionAgent.output",
@@ -448,7 +448,7 @@ error_handling:
 ## Implementation Recommendations
 
 ### MVP Development Order
-1. **Phase 1**: BuildAgent + ChampionsAgent (Core functionality)
+1. **Phase 1**: BuildAgent + ChampionAgent (Core functionality)
 2. **Phase 2**: EconomyAgent + CombatAgent (Performance analysis)  
 3. **Phase 3**: VisionAgent + CompetitiveAgent (Advanced insights)
 4. **Phase 4**: SupervisorAgent optimization and cross-correlation

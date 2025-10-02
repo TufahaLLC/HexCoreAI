@@ -1,0 +1,573 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: HexCore AI Event-Driven Serverless Architecture
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    RuntimeManagementConfig:
+      UpdateRuntimeOn: Auto  # Optional: Enable automatic runtime updates
+    Timeout: 60
+    MemorySize: 1024
+    Architectures:
+      - arm64
+    Environment:
+      Variables:
+        RIOT_API_KEY_SECRET: !Ref RiotApiKeySecretArn
+        CONNECTIONS_TABLE: !Ref ConnectionsTable
+        MATCH_DATA_TABLE: !Ref MatchDataTable
+        MATCH_QUEUE_URL: !Ref MatchQueue
+        WEBSOCKET_ENDPOINT: !Sub 'https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}'
+    Tracing: Active
+
+Parameters:
+  Stage:
+    Type: String
+    Default: test
+    Description: API Gateway stage name
+  RiotApiKeySecretArn:
+    Type: String
+    Description: ARN of Secrets Manager secret containing Riot API key
+
+Resources:
+  # ==================== API Gateway WebSocket ====================
+  WebSocketApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: HexCoreWebSocketApi
+      ProtocolType: WEBSOCKET
+      RouteSelectionExpression: $request.body.action
+
+  ConnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: $connect
+      AuthorizationType: NONE
+      Target: !Sub integrations/${ConnectIntegration}
+
+  ConnectIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WebSocketApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${WebSocketConnectFunction.Arn}/invocations
+
+  DisconnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: $disconnect
+      Target: !Sub integrations/${DisconnectIntegration}
+
+  DisconnectIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WebSocketApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${WebSocketDisconnectFunction.Arn}/invocations
+
+  Deployment:
+    Type: AWS::ApiGatewayV2::Deployment
+    DependsOn:
+      - ConnectRoute
+      - DisconnectRoute
+    Properties:
+      ApiId: !Ref WebSocketApi
+
+  Stage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref WebSocketApi
+      DeploymentId: !Ref Deployment
+      StageName: !Ref Stage
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 10000
+        ThrottlingRateLimit: 5000
+
+  # ==================== DynamoDB Tables ====================
+  ConnectionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: HexCore-Connections
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: connectionId
+          AttributeType: S
+        - AttributeName: sessionId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: connectionId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: SessionIndex
+          KeySchema:
+            - AttributeName: sessionId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+
+  MatchDataTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: HexCore-MatchData
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: dataKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: dataKey
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
+  AnalysisResultsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: HexCore-AnalysisResults
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: resultId
+          AttributeType: S
+        - AttributeName: puuid
+          AttributeType: S
+      KeySchema:
+        - AttributeName: resultId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: PuuidIndex
+          KeySchema:
+            - AttributeName: puuid
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+
+  # ==================== SQS Queues ====================
+  MatchQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: HexCore-MatchQueue
+      VisibilityTimeout: 300
+      MessageRetentionPeriod: 345600
+      ReceiveMessageWaitTimeSeconds: 20
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt MatchDeadLetterQueue.Arn
+        maxReceiveCount: 5
+
+  MatchDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: HexCore-MatchQueue-DLQ
+      MessageRetentionPeriod: 1209600
+
+  # ==================== Lambda Functions ====================
+  WebSocketConnectFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: HexCore-WebSocket-Connect
+      Handler: websocket/connect.handler
+      CodeUri: ./dist
+      Timeout: 29
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConnectionsTable
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt MatchQueue.QueueName
+        - Statement:
+            - Effect: Allow
+              Action:
+                - execute-api:ManageConnections
+              Resource: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Ref RiotApiKeySecretArn
+
+  WebSocketConnectPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref WebSocketConnectFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*
+
+  WebSocketDisconnectFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: HexCore-WebSocket-Disconnect
+      Handler: websocket/disconnect.handler
+      CodeUri: ./dist
+      Timeout: 10
+      MemorySize: 256
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConnectionsTable
+
+  WebSocketDisconnectPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref WebSocketDisconnectFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*
+
+  MatchProcessorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: HexCore-Match-Processor
+      Handler: processor/matchProcessor.handler
+      CodeUri: ./dist
+      Timeout: 60
+      MemorySize: 1024
+      ReservedConcurrentExecutions: 50
+      Events:
+        SQSEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt MatchQueue.Arn
+            BatchSize: 10
+            MaximumBatchingWindowInSeconds: 5
+            FunctionResponseTypes:
+              - ReportBatchItemFailures
+      Policies:
+        - SQSPollerPolicy:
+            QueueName: !GetAtt MatchQueue.QueueName
+        - DynamoDBCrudPolicy:
+            TableName: !Ref MatchDataTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConnectionsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - events:PutEvents
+              Resource: !Sub arn:aws:events:${AWS::Region}:${AWS::AccountId}:event-bus/default
+            - Effect: Allow
+              Action:
+                - execute-api:ManageConnections
+              Resource: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Ref RiotApiKeySecretArn
+
+  # ==================== Agent Lambda Functions ====================
+  BuildAgentFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: HexCore-BuildAgent
+      Handler: agents/buildAgent.handler
+      CodeUri: ./dist
+      Timeout: 60
+      MemorySize: 512
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref MatchDataTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConnectionsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - execute-api:ManageConnections
+              Resource: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeAgent
+              Resource: '*'
+
+  CombatAgentFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: HexCore-CombatAgent
+      Handler: agents/combatAgent.handler
+      CodeUri: ./dist
+      Timeout: 60
+      MemorySize: 512
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref MatchDataTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConnectionsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - execute-api:ManageConnections
+              Resource: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeAgent
+              Resource: '*'
+
+  VisionAgentFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: HexCore-VisionAgent
+      Handler: agents/visionAgent.handler
+      CodeUri: ./dist
+      Timeout: 60
+      MemorySize: 512
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref MatchDataTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConnectionsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - execute-api:ManageConnections
+              Resource: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeAgent
+              Resource: '*'
+
+  EconomyAgentFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: HexCore-EconomyAgent
+      Handler: agents/economyAgent.handler
+      CodeUri: ./dist
+      Timeout: 60
+      MemorySize: 512
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref MatchDataTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConnectionsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - execute-api:ManageConnections
+              Resource: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeAgent
+              Resource: '*'
+
+  ChampionAgentFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: HexCore-ChampionAgent
+      Handler: agents/championAgent.handler
+      CodeUri: ./dist
+      Timeout: 60
+      MemorySize: 512
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref MatchDataTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConnectionsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - execute-api:ManageConnections
+              Resource: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeAgent
+              Resource: '*'
+
+  CompetitiveAgentFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: HexCore-CompetitiveAgent
+      Handler: agents/competitiveAgent.handler
+      CodeUri: ./dist
+      Timeout: 60
+      MemorySize: 512
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref MatchDataTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConnectionsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - execute-api:ManageConnections
+              Resource: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeAgent
+              Resource: '*'
+
+  SynthesizerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: HexCore-Synthesizer
+      Handler: aggregation/synthesizer.handler
+      CodeUri: ./dist
+      Timeout: 60
+      MemorySize: 1024
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AnalysisResultsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConnectionsTable
+        - S3CrudPolicy:
+            BucketName: !Ref ResultsBucket
+        - Statement:
+            - Effect: Allow
+              Action:
+                - execute-api:ManageConnections
+              Resource: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*
+
+  # ==================== S3 Bucket ====================
+  ResultsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub hexcore-results-${AWS::AccountId}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldResults
+            Status: Enabled
+            ExpirationInDays: 90
+
+  # ==================== EventBridge ====================
+  MatchFilteredReadyRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: HexCore-MatchFilteredReady
+      Description: Triggers Step Functions when match data is ready
+      EventPattern:
+        source:
+          - hexcore.match.processor
+        detail-type:
+          - match.filtered.ready
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt MultiAgentStateMachine.Arn
+          RoleArn: !GetAtt EventBridgeStepFunctionsRole.Arn
+          Id: StepFunctionsTarget
+
+  EventBridgeStepFunctionsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: InvokeStepFunctions
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - states:StartExecution
+                Resource: !GetAtt MultiAgentStateMachine.Arn
+
+  # ==================== Step Functions ====================
+  MultiAgentStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Name: HexCore-MultiAgent-Orchestration
+      Type: EXPRESS
+      DefinitionUri: statemachine/multi-agent-orchestration.asl.json
+      DefinitionSubstitutions:
+        BuildAgentFunctionArn: !GetAtt BuildAgentFunction.Arn
+        CombatAgentFunctionArn: !GetAtt CombatAgentFunction.Arn
+        VisionAgentFunctionArn: !GetAtt VisionAgentFunction.Arn
+        EconomyAgentFunctionArn: !GetAtt EconomyAgentFunction.Arn
+        ChampionAgentFunctionArn: !GetAtt ChampionAgentFunction.Arn
+        CompetitiveAgentFunctionArn: !GetAtt CompetitiveAgentFunction.Arn
+        SynthesizerFunctionArn: !GetAtt SynthesizerFunction.Arn
+      Policies:
+        - LambdaInvokePolicy:
+            FunctionName: !Ref BuildAgentFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref CombatAgentFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref VisionAgentFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref EconomyAgentFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref ChampionAgentFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref CompetitiveAgentFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref SynthesizerFunction
+      Tracing:
+        Enabled: true
+      Logging:
+        Level: ALL
+        IncludeExecutionData: true
+        Destinations:
+          - CloudWatchLogsLogGroup:
+              LogGroupArn: !GetAtt StateMachineLogGroup.Arn
+
+  StateMachineLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/stepfunctions/HexCore-MultiAgent
+      RetentionInDays: 7
+
+  # ==================== CloudWatch Alarms ====================
+  DLQAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: HexCore-DLQ-Messages
+      AlarmDescription: Alert when messages arrive in DLQ
+      MetricName: ApproximateNumberOfMessagesVisible
+      Namespace: AWS/SQS
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt MatchDeadLetterQueue.QueueName
+
+  QueueAgeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: HexCore-Queue-Age
+      AlarmDescription: Alert when messages are old
+      MetricName: ApproximateAgeOfOldestMessage
+      Namespace: AWS/SQS
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 600
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt MatchQueue.QueueName
+
+Outputs:
+  WebSocketURL:
+    Description: WebSocket API URL
+    Value: !Sub wss://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}
+
+  ConnectionsTableName:
+    Description: Connections DynamoDB table name
+    Value: !Ref ConnectionsTable
+
+  MatchDataTableName:
+    Description: Match Data DynamoDB table name
+    Value: !Ref MatchDataTable
+
+  MatchQueueUrl:
+    Description: Match Queue URL
+    Value: !Ref MatchQueue
+
+  ResultsBucketName:
+    Description: Results S3 bucket name
+    Value: !Ref ResultsBucket
