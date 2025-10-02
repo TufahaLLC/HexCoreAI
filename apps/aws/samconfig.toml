@@ -1,0 +1,4 @@
+# SAM Configuration
+# This file will be configured during deployment setup
+
+version = 0.1

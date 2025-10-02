@@ -1,0 +1,28 @@
+{
+  "name": "hexcore-ai",
+  "version": "1.0.0",
+  "description": "HexCore AI Serverless Architecture",
+  "scripts": {
+    "prebuild": "pnpm run clean",
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "watch": "tsc --watch",
+    "deploy": "pnpm run build && sam deploy",
+    "local": "sam local start-api"
+  },
+  "dependencies": {
+    "@aws-sdk/client-apigatewaymanagementapi": "^3.901.0",
+    "@aws-sdk/client-dynamodb": "^3.901.0",
+    "@aws-sdk/client-eventbridge": "^3.901.0",
+    "@aws-sdk/client-s3": "^3.901.0",
+    "@aws-sdk/client-secrets-manager": "^3.901.0",
+    "@aws-sdk/client-sqs": "^3.901.0",
+    "@aws-sdk/lib-dynamodb": "^3.901.0",
+    "axios": "^1.12.2"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.153",
+    "@types/node": "^24.6.2",
+    "typescript": "^5.9.3"
+  }
+}

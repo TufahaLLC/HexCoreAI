@@ -11,15 +11,15 @@ This guide contains all implementation tasks in the recommended order. Tasks are
 Install required development tools on your local machine.
 
 **Subtasks:**
-- [ ] Install AWS SAM CLI
+- [x] Install AWS SAM CLI
   - macOS: `brew install aws-sam-cli`
   - Linux: `pip install aws-sam-cli`
   - Windows: `choco install aws-sam-cli`
-- [ ] Install Node.js 20.x LTS from nodejs.org
-- [ ] Verify installation: `node --version` (should show v20.x)
-- [ ] Verify npm installation: `npm --version`
-- [ ] Install AWS CLI v2 from aws.amazon.com/cli
-- [ ] Verify AWS CLI: `aws --version`
+- [x] Install Node.js 20.x LTS from nodejs.org
+- [x] Verify installation: `node --version` (should show v20.x)
+- [x] Verify npm installation: `npm --version`
+- [x] Install AWS CLI v2 from aws.amazon.com/cli
+- [x] Verify AWS CLI: `aws --version`
 
 ---
 
@@ -28,12 +28,12 @@ Install required development tools on your local machine.
 Set up AWS credentials for deployment.
 
 **Subtasks:**
-- [ ] Run `aws configure`
-- [ ] Enter AWS Access Key ID
-- [ ] Enter AWS Secret Access Key
-- [ ] Enter default region (recommended: us-west-2)
-- [ ] Enter default output format (recommended: json)
-- [ ] Verify configuration: `aws sts get-caller-identity`
+- [x] Run `aws configure`
+- [x] Enter AWS Access Key ID
+- [x] Enter AWS Secret Access Key
+- [x] Enter default region (recommended: us-west-2)
+- [x] Enter default output format (recommended: json)
+- [x] Verify configuration: `aws sts get-caller-identity`
 
 ---
 
@@ -42,12 +42,12 @@ Set up AWS credentials for deployment.
 Register for Riot Developer access and obtain an API key.
 
 **Subtasks:**
-- [ ] Visit developer.riotgames.com
-- [ ] Create Riot Developer account (if needed)
-- [ ] Navigate to "My Applications"
-- [ ] Generate a Production API key for League of Legends
-- [ ] Copy and securely save the API key
-- [ ] Note the rate limits for your API key tier
+- [x] Visit developer.riotgames.com
+- [x] Create Riot Developer account (if needed)
+- [x] Navigate to "My Applications"
+- [x] Generate a Production API key for League of Legends
+- [x] Copy and securely save the API key
+- [x] Note the rate limits for your API key tier
 
 ---
 
@@ -56,16 +56,16 @@ Register for Riot Developer access and obtain an API key.
 Store the Riot API key securely in AWS Secrets Manager.
 
 **Subtasks:**
-- [ ] Run the following command (replace YOUR_RIOT_API_KEY):
+- [x] Run the following command (replace YOUR_RIOT_API_KEY):
 ```bash
 aws secretsmanager create-secret \
   --name riot-api-key \
   --secret-string "YOUR_RIOT_API_KEY" \
   --region us-west-2
 ```
-- [ ] Copy the ARN returned (format: `arn:aws:secretsmanager:region:account:secret:riot-api-key-XXXXX`)
-- [ ] Save the ARN for later use in samconfig.toml
-- [ ] Verify secret creation:
+- [x] Copy the ARN returned (format: `arn:aws:secretsmanager:region:account:secret:riot-api-key-XXXXX`)
+- [x] Save the ARN for later use in samconfig.toml
+- [x] Verify secret creation:
 ```bash
 aws secretsmanager describe-secret --secret-id riot-api-key --region us-west-2
 ```
@@ -77,16 +77,14 @@ aws secretsmanager describe-secret --secret-id riot-api-key --region us-west-2
 Create an S3 bucket for SAM deployment artifacts.
 
 **Subtasks:**
-- [ ] Choose a unique bucket name (e.g., `hexcore-ai-deployment-YOUR-NAME`)
-- [ ] Create bucket:
+- [x] Choose a unique bucket name (e.g., `hexcore-ai-deployment-YOUR-NAME-dev`)
+- [x] Create bucket:
 ```bash
-aws s3 mb s3://hexcore-ai-deployment-YOUR-NAME --region us-west-2
-```
-- [ ] Verify bucket creation:
+aws s3 mb s3://hexcore-ai-deployment-YOUR-NAME-dev --region us-west-2
 ```bash
-aws s3 ls | grep hexcore-ai-deployment
+- [x] Verify bucket creation:
 ```
-- [ ] Note the bucket name for samconfig.toml
+- [x] Note the bucket name for samconfig.toml
 
 ---
 
@@ -97,7 +95,7 @@ aws s3 ls | grep hexcore-ai-deployment
 This task creates the complete project directory structure with all necessary folders and placeholder files.
 
 **After completion, verify:**
-- [ ] `hexcore-ai/` root directory exists
+- [ ] `aws/` root directory exists
 - [ ] `src/` directory with all subdirectories created
 - [ ] `statemachine/` directory exists
 - [ ] Placeholder files created (template.yaml, package.json, etc.)

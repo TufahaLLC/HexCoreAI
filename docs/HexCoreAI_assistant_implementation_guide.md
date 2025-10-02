@@ -6,55 +6,56 @@ This guide contains all implementation tasks designed for AI coding assistants, 
 
 ## Phase 1: Project Structure & Configuration
 
-### Task 1.5: Initialize Project Structure
+### Task 1.6: Initialize Project Structure
 
-Create the complete project directory structure for the HexCore AI serverless application.
+Create the complete project directory structure for the HexCore AI serverless application within the monorepo `apps/` folder.
 
 **Subtasks:**
-- [ ] Create root project directory `hexcore-ai/`
-- [ ] Create `src/` directory with subdirectories:
-  - [ ] `src/websocket/` for WebSocket handlers
-  - [ ] `src/processor/` for match data processing
-  - [ ] `src/agents/` for specialized analysis agents
-  - [ ] `src/aggregation/` for results synthesis
-  - [ ] `src/shared/` for utility functions and types
-  - [ ] `src/layers/nodejs/` for Lambda layers
-- [ ] Create `statemachine/` directory for Step Functions definitions
-- [ ] Create placeholder files:
-  - [ ] `template.yaml` (SAM template)
-  - [ ] `samconfig.toml` (SAM configuration)
-  - [ ] `package.json` (Node.js dependencies)
-  - [ ] `tsconfig.json` (TypeScript configuration)
+- [x] Create project directory `apps/aws/`
+- [x] Inside `apps/aws/`, create `src/` directory with subdirectories:
+  - [x] `src/websocket/` for WebSocket handlers
+  - [x] `src/processor/` for match data processing
+  - [x] `src/agents/` for specialized analysis agents
+  - [x] `src/aggregation/` for results synthesis
+  - [x] `src/shared/` for utility functions and types
+  - [x] `src/layers/nodejs/` for Lambda layers
+- [x] Create `statemachine/` directory for Step Functions definitions under `apps/aws/`
+- [x] Create placeholder files in `apps/aws/`:
+  - [x] `template.yaml` (SAM template)
+  - [x] `samconfig.toml` (SAM configuration)
+  - [x] `package.json` (Node.js dependencies)
+  - [x] `tsconfig.json` (TypeScript configuration)
 
 **Expected Structure:**
 ```
-hexcore-ai/
-├── template.yaml
-├── samconfig.toml
-├── package.json
-├── tsconfig.json
-├── src/
-│   ├── websocket/
-│   ├── processor/
-│   ├── agents/
-│   ├── aggregation/
-│   ├── shared/
-│   └── layers/nodejs/
-└── statemachine/
+apps/
+└── aws/
+    ├── template.yaml
+    ├── samconfig.toml
+    ├── package.json
+    ├── tsconfig.json
+    ├── src/
+    │   ├── websocket/
+    │   ├── processor/
+    │   ├── agents/
+    │   ├── aggregation/
+    │   ├── shared/
+    │   └── layers/nodejs/
+    └── statemachine/
 ```
 
 ---
 
-### Task 1.6: Configure TypeScript Build Environment
+### Task 1.7: Configure TypeScript Build Environment
 
 Set up the TypeScript compilation environment with all necessary dependencies.
 
 **Subtasks:**
-- [ ] Create `package.json` with build scripts and dependencies
-- [ ] Create `tsconfig.json` with compiler options
-- [ ] Add AWS SDK dependencies for all required services
-- [ ] Add development dependencies (TypeScript, types)
-- [ ] Configure build scripts for SAM deployment
+- [x] Create `package.json` with build scripts and dependencies
+- [x] Create `tsconfig.json` with compiler options
+- [x] Add AWS SDK dependencies for all required services
+- [x] Add development dependencies (TypeScript, types)
+- [x] Configure build scripts for SAM deployment
 
 **package.json:**
 ```json
@@ -120,12 +121,12 @@ Set up the TypeScript compilation environment with all necessary dependencies.
 Initialize the SAM template with global Lambda configuration.
 
 **Subtasks:**
-- [ ] Create `template.yaml` with AWSTemplateFormatVersion and Transform
-- [ ] Add Globals section with Function defaults
-- [ ] Configure Runtime (nodejs20.x), Architecture (arm64)
-- [ ] Set default Timeout (60s) and MemorySize (1024MB)
-- [ ] Add Environment Variables section
-- [ ] Enable X-Ray Tracing globally
+- [x] Create `template.yaml` with AWSTemplateFormatVersion and Transform
+- [x] Add Globals section with Function defaults
+- [x] Configure Runtime (nodejs20.x), Architecture (arm64)
+- [x] Set default Timeout (60s) and MemorySize (1024MB)
+- [x] Add Environment Variables section
+- [x] Enable X-Ray Tracing globally
 
 **template.yaml (Header):**
 ```yaml
@@ -159,9 +160,9 @@ Globals:
 Add CloudFormation parameters for deployment configuration.
 
 **Subtasks:**
-- [ ] Add `Stage` parameter with default value 'test'
-- [ ] Add `RiotApiKeySecretArn` parameter for Secrets Manager ARN
-- [ ] Add parameter descriptions
+- [x] Add `Stage` parameter with default value 'test'
+- [x] Add `RiotApiKeySecretArn` parameter for Secrets Manager ARN
+- [x] Add parameter descriptions
 
 **Parameters Section:**
 ```yaml
@@ -182,22 +183,22 @@ Parameters:
 Create all DynamoDB table resources with proper configuration.
 
 **Subtasks:**
-- [ ] Define `ConnectionsTable` resource
-  - [ ] Set partition key: `connectionId` (String)
-  - [ ] Add Global Secondary Index: `SessionIndex` on `sessionId`
-  - [ ] Enable TTL on `ttl` attribute
-  - [ ] Set billing mode to PAY_PER_REQUEST
-  - [ ] Enable DynamoDB Streams
-- [ ] Define `MatchDataTable` resource
-  - [ ] Set partition key: `dataKey` (String)
-  - [ ] Enable TTL on `expiresAt` attribute
-  - [ ] Enable Point-in-Time Recovery
-  - [ ] Set billing mode to PAY_PER_REQUEST
-- [ ] Define `AnalysisResultsTable` resource
-  - [ ] Set partition key: `resultId` (String)
-  - [ ] Add Global Secondary Index: `PuuidIndex` on `puuid`
-  - [ ] Enable TTL on `expiresAt` attribute
-  - [ ] Set billing mode to PAY_PER_REQUEST
+- [x] Define `ConnectionsTable` resource
+  - [x] Set partition key: `connectionId` (String)
+  - [x] Add Global Secondary Index: `SessionIndex` on `sessionId`
+  - [x] Enable TTL on `ttl` attribute
+  - [x] Set billing mode to PAY_PER_REQUEST
+  - [x] Enable DynamoDB Streams
+- [x] Define `MatchDataTable` resource
+  - [x] Set partition key: `dataKey` (String)
+  - [x] Enable TTL on `expiresAt` attribute
+  - [x] Enable Point-in-Time Recovery
+  - [x] Set billing mode to PAY_PER_REQUEST
+- [x] Define `AnalysisResultsTable` resource
+  - [x] Set partition key: `resultId` (String)
+  - [x] Add Global Secondary Index: `PuuidIndex` on `puuid`
+  - [x] Enable TTL on `expiresAt` attribute
+  - [x] Set billing mode to PAY_PER_REQUEST
 
 **DynamoDB Tables Configuration:**
 ```yaml
@@ -278,15 +279,15 @@ Resources:
 Create SQS queues for match processing with dead letter queue.
 
 **Subtasks:**
-- [ ] Define `MatchQueue` resource
-  - [ ] Set QueueName: `HexCore-MatchQueue`
-  - [ ] Set VisibilityTimeout: 300 seconds
-  - [ ] Set MessageRetentionPeriod: 4 days (345600 seconds)
-  - [ ] Enable long polling: ReceiveMessageWaitTimeSeconds: 20
-  - [ ] Configure RedrivePolicy with DLQ and maxReceiveCount: 5
-- [ ] Define `MatchDeadLetterQueue` resource
-  - [ ] Set QueueName: `HexCore-MatchQueue-DLQ`
-  - [ ] Set MessageRetentionPeriod: 14 days (1209600 seconds)
+- [x] Define `MatchQueue` resource
+  - [x] Set QueueName: `HexCore-MatchQueue`
+  - [x] Set VisibilityTimeout: 300 seconds
+  - [x] Set MessageRetentionPeriod: 4 days (345600 seconds)
+  - [x] Enable long polling: ReceiveMessageWaitTimeSeconds: 20
+  - [x] Configure RedrivePolicy with DLQ and maxReceiveCount: 5
+- [x] Define `MatchDeadLetterQueue` resource
+  - [x] Set QueueName: `HexCore-MatchQueue-DLQ`
+  - [x] Set MessageRetentionPeriod: 14 days (1209600 seconds)
 
 **SQS Configuration:**
 ```yaml
@@ -316,10 +317,10 @@ Create SQS queues for match processing with dead letter queue.
 Create S3 bucket for storing analysis results with lifecycle policies.
 
 **Subtasks:**
-- [ ] Define `ResultsBucket` resource
-  - [ ] Set dynamic bucket name using AWS::AccountId
-  - [ ] Enable server-side encryption (AES256)
-  - [ ] Add lifecycle rule to delete objects after 90 days
+- [x] Define `ResultsBucket` resource
+  - [x] Set dynamic bucket name using AWS::AccountId
+  - [x] Enable server-side encryption (AES256)
+  - [x] Add lifecycle rule to delete objects after 90 days
 
 **S3 Configuration:**
 ```yaml
@@ -346,13 +347,13 @@ Create S3 bucket for storing analysis results with lifecycle policies.
 Create WebSocket API with routes and integrations.
 
 **Subtasks:**
-- [ ] Define `WebSocketApi` resource with WEBSOCKET protocol
-- [ ] Define `ConnectRoute` ($connect) with Lambda integration
-- [ ] Define `ConnectIntegration` for WebSocket connection
-- [ ] Define `DisconnectRoute` ($disconnect) with Lambda integration
-- [ ] Define `DisconnectIntegration` for WebSocket disconnection
-- [ ] Create `Deployment` resource with route dependencies
-- [ ] Create `Stage` resource with throttling settings
+- [x] Define `WebSocketApi` resource with WEBSOCKET protocol
+- [x] Define `ConnectRoute` ($connect) with Lambda integration
+- [x] Define `ConnectIntegration` for WebSocket connection
+- [x] Define `DisconnectRoute` ($disconnect) with Lambda integration
+- [x] Define `DisconnectIntegration` for WebSocket disconnection
+- [x] Create `Deployment` resource with route dependencies
+- [x] Create `Stage` resource with throttling settings
 
 **WebSocket Configuration:**
 ```yaml
@@ -419,38 +420,38 @@ Create WebSocket API with routes and integrations.
 Create all Lambda function resources with proper IAM policies.
 
 **Subtasks:**
-- [ ] Define `WebSocketConnectFunction`
-  - [ ] Set handler: `websocket/connect.handler`
-  - [ ] Set timeout: 29 seconds
-  - [ ] Add DynamoDB PutItem policy
-  - [ ] Add SQS SendMessage policy
-  - [ ] Add API Gateway ManageConnections policy
-  - [ ] Add Secrets Manager GetSecretValue policy
-  - [ ] Add Lambda invoke permission for API Gateway
-- [ ] Define `WebSocketDisconnectFunction`
-  - [ ] Set handler: `websocket/disconnect.handler`
-  - [ ] Set timeout: 10 seconds, memory: 256MB
-  - [ ] Add DynamoDB DeleteItem policy
-  - [ ] Add Lambda invoke permission for API Gateway
-- [ ] Define `MatchProcessorFunction`
-  - [ ] Set handler: `processor/matchProcessor.handler`
-  - [ ] Set reserved concurrent executions: 50
-  - [ ] Add SQS event trigger with batch size 10
-  - [ ] Enable ReportBatchItemFailures
-  - [ ] Add DynamoDB read/write policies
-  - [ ] Add EventBridge PutEvents policy
-  - [ ] Add API Gateway ManageConnections policy
-- [ ] Define all 6 agent functions (`BuildAgent`, `CombatAgent`, `VisionAgent`, `EconomyAgent`, `ChampionAgent`, `CompetitiveAgent`)
-  - [ ] Set handler: `agents/{agentName}.handler`
-  - [ ] Set memory: 512MB
-  - [ ] Add DynamoDB read policy
-  - [ ] Add Bedrock InvokeAgent policy
-  - [ ] Add API Gateway ManageConnections policy
-- [ ] Define `SynthesizerFunction`
-  - [ ] Set handler: `aggregation/synthesizer.handler`
-  - [ ] Add DynamoDB read/write policies
-  - [ ] Add S3 PutObject policy
-  - [ ] Add API Gateway ManageConnections policy
+- [x] Define `WebSocketConnectFunction`
+  - [x] Set handler: `websocket/connect.handler`
+  - [x] Set timeout: 29 seconds
+  - [x] Add DynamoDB PutItem policy
+  - [x] Add SQS SendMessage policy
+  - [x] Add API Gateway ManageConnections policy
+  - [x] Add Secrets Manager GetSecretValue policy
+  - [x] Add Lambda invoke permission for API Gateway
+- [x] Define `WebSocketDisconnectFunction`
+  - [x] Set handler: `websocket/disconnect.handler`
+  - [x] Set timeout: 10 seconds, memory: 256MB
+  - [x] Add DynamoDB DeleteItem policy
+  - [x] Add Lambda invoke permission for API Gateway
+- [x] Define `MatchProcessorFunction`
+  - [x] Set handler: `processor/matchProcessor.handler`
+  - [x] Set reserved concurrent executions: 50
+  - [x] Add SQS event trigger with batch size 10
+  - [x] Enable ReportBatchItemFailures
+  - [x] Add DynamoDB read/write policies
+  - [x] Add EventBridge PutEvents policy
+  - [x] Add API Gateway ManageConnections policy
+- [x] Define all 6 agent functions (`BuildAgent`, `CombatAgent`, `VisionAgent`, `EconomyAgent`, `ChampionAgent`, `CompetitiveAgent`)
+  - [x] Set handler: `agents/{agentName}.handler`
+  - [x] Set memory: 512MB
+  - [x] Add DynamoDB read policy
+  - [x] Add Bedrock InvokeAgent policy
+  - [x] Add API Gateway ManageConnections policy
+- [x] Define `SynthesizerFunction`
+  - [x] Set handler: `aggregation/synthesizer.handler`
+  - [x] Add DynamoDB read/write policies
+  - [x] Add S3 PutObject policy
+  - [x] Add API Gateway ManageConnections policy
 
 **Lambda Functions Configuration (WebSocket):**
 ```yaml
@@ -582,21 +583,21 @@ Create all Lambda function resources with proper IAM policies.
 Create EventBridge rule and Step Functions state machine.
 
 **Subtasks:**
-- [ ] Define `MatchFilteredReadyRule` EventBridge rule
-  - [ ] Set event pattern for `hexcore.match.processor` source
-  - [ ] Set detail-type: `match.filtered.ready`
-  - [ ] Add Step Functions as target
-- [ ] Define `EventBridgeStepFunctionsRole` IAM role
-  - [ ] Add trust relationship for events.amazonaws.com
-  - [ ] Add policy to start Step Functions executions
-- [ ] Define `MultiAgentStateMachine` resource
-  - [ ] Set type: EXPRESS workflow
-  - [ ] Reference external definition file
-  - [ ] Add substitutions for Lambda ARNs
-  - [ ] Add Lambda invoke policies for all agents
-  - [ ] Enable tracing and logging
-- [ ] Define `StateMachineLogGroup` for Step Functions logs
-  - [ ] Set retention: 7 days
+- [x] Define `MatchFilteredReadyRule` EventBridge rule
+  - [x] Set event pattern for `hexcore.match.processor` source
+  - [x] Set detail-type: `match.filtered.ready`
+  - [x] Add Step Functions as target
+- [x] Define `EventBridgeStepFunctionsRole` IAM role
+  - [x] Add trust relationship for events.amazonaws.com
+  - [x] Add policy to start Step Functions executions
+- [x] Define `MultiAgentStateMachine` resource
+  - [x] Set type: EXPRESS workflow
+  - [x] Reference external definition file
+  - [x] Add substitutions for Lambda ARNs
+  - [x] Add Lambda invoke policies for all agents
+  - [x] Enable tracing and logging
+- [x] Define `StateMachineLogGroup` for Step Functions logs
+  - [x] Set retention: 7 days
 
 **EventBridge & Step Functions Configuration:**
 ```yaml
@@ -690,14 +691,14 @@ Create EventBridge rule and Step Functions state machine.
 Create CloudWatch alarms for monitoring critical metrics.
 
 **Subtasks:**
-- [ ] Define `DLQAlarm` for dead letter queue
-  - [ ] Monitor ApproximateNumberOfMessagesVisible metric
-  - [ ] Set threshold: >= 1 message
-  - [ ] Evaluation period: 5 minutes
-- [ ] Define `QueueAgeAlarm` for message age
-  - [ ] Monitor ApproximateAgeOfOldestMessage metric
-  - [ ] Set threshold: > 600 seconds (10 minutes)
-  - [ ] Evaluation periods: 2
+- [x] Define `DLQAlarm` for dead letter queue
+  - [x] Monitor ApproximateNumberOfMessagesVisible metric
+  - [x] Set threshold: >= 1 message
+  - [x] Evaluation period: 5 minutes
+- [x] Define `QueueAgeAlarm` for message age
+  - [x] Monitor ApproximateAgeOfOldestMessage metric
+  - [x] Set threshold: > 600 seconds (10 minutes)
+  - [x] Evaluation periods: 2
 
 **CloudWatch Alarms Configuration:**
 ```yaml
@@ -742,11 +743,11 @@ Create CloudWatch alarms for monitoring critical metrics.
 Add CloudFormation outputs for easy reference.
 
 **Subtasks:**
-- [ ] Add `WebSocketURL` output with WebSocket connection URL
-- [ ] Add `ConnectionsTableName` output
-- [ ] Add `MatchDataTableName` output
-- [ ] Add `MatchQueueUrl` output
-- [ ] Add `ResultsBucketName` output
+- [x] Add `WebSocketURL` output with WebSocket connection URL
+- [x] Add `ConnectionsTableName` output
+- [x] Add `MatchDataTableName` output
+- [x] Add `MatchQueueUrl` output
+- [x] Add `ResultsBucketName` output
 
 **Outputs Configuration:**
 ```yaml
