@@ -18,6 +18,7 @@ export function getPageImage(page: InferPageType<typeof source>) {
   };
 }
 
+// biome-ignore lint/style/useNamingConvention: This is a legacy variable name
 export async function getLLMText(page: InferPageType<typeof source>) {
   const processed = await page.data.getText("processed");
 

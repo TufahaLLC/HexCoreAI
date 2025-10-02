@@ -13,11 +13,13 @@ export function baseOptions(): BaseLayoutProps {
       title: (
         <>
           <svg
-            aria-label="Logo"
+            aria-labelledby="nav-logo-title"
             height="24"
+            role="img"
             width="24"
             xmlns="http://www.w3.org/2000/svg"
           >
+            <title id="nav-logo-title">HexCore AI logo</title>
             <circle cx={12} cy={12} fill="currentColor" r={12} />
           </svg>
           My App
