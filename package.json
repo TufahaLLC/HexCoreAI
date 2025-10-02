@@ -17,13 +17,12 @@
     "dev:server": "turbo -F server dev",
     "prepare": "husky"
   },
-  "dependencies": {},
   "devDependencies": {
-    "turbo": "^2.5.4",
-    "@biomejs/biome": "2.2.4",
-    "ultracite": "5.4.5",
+    "@biomejs/biome": "2.2.5",
     "husky": "^9.1.7",
-    "lint-staged": "^16.1.2"
+    "lint-staged": "^16.2.3",
+    "turbo": "^2.5.8",
+    "ultracite": "5.5.0"
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx,json,jsonc,css,scss,md,mdx}": [
