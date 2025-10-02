@@ -5,7 +5,7 @@ This guide provides complete infrastructure-as-code implementation using AWS SAM
 ## Project Structure
 
 ```
-hexcore-ai/
+aws/
 ├── template.yaml                 # SAM template (main IaC file)
 ├── samconfig.toml               # SAM CLI configuration
 ├── package.json                 # TypeScript dependencies
@@ -904,7 +904,7 @@ Create `statemachine/multi-agent-orchestration.asl.json`:
 
 ## TypeScript Configuration
 
-Create `package.json`[1]:
+Create `package.json`:
 
 ```json
 {
