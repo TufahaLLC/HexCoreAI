@@ -20,6 +20,10 @@ args = ["-y", "@upstash/context7-mcp"]
 command = "npx"
 args = ["-y", "mcp-remote", "https://www.ultracite.ai/api/mcp/mcp"]
 
+[mcp_servers.aws-documentation-mcp-server]
+command = "uvx"
+args = ["awslabs.aws-documentation-mcp-server@latest"]
+
 # [mcp_servers.shadcn]
 # command = "npx"
 # args = ["shadcn@latest", "mcp"]

@@ -165,22 +165,6 @@ HexCoreAI/
 pnpm install              # Install all dependencies
 pnpm run dev              # Start all apps (web, fumadocs)
 ```
-
-### Working with Individual Apps
-```bash
-pnpm run dev:web          # Start Next.js web app only (port 3001)
-```
-
-### AWS SAM Development
-```bash
-cd apps/aws
-pnpm install              # Install TypeScript dependencies
-sam build                 # Compile TypeScript Lambdas
-sam local start-api       # Local API Gateway emulation
-sam deploy --guided       # Deploy to AWS (first time)
-sam deploy                # Subsequent deployments
-```
-
 ### Code Quality
 ```bash
 pnpm run check            # Run Biome linter/formatter
@@ -231,3 +215,4 @@ See `docs/HexCoreAi_architecture_design.md` for comprehensive architecture detai
 4. **Idempotency**: DynamoDB conditional writes, versioned agent outputs
 5. **Testing**: Unit tests per Lambda, integration tests for WebSocket flow
 6. **Monitoring**: X-Ray tracing enabled on all Lambdas, CloudWatch alarms on critical metrics
+7. **Ultracite Rules Compliance**: Whenever suggesting or providing code snippets, or making code changes, first fetch the ultracite rules and ensure the code abides by them
