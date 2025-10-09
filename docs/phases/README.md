@@ -29,7 +29,8 @@ phases/
 ├── phase-06/          # Step Functions State Machine
 ├── phase-07/          # Agent Lambda Functions
 ├── phase-08/          # Results Aggregation & Synthesis
-└── phase-09/          # User Validation & Testing
+├── phase-09/          # User Validation & Testing
+└── phase-10/          # Client Web App (Next.js) WebSocket Integration
 ```
 
 ## Phase Overview
@@ -115,6 +116,20 @@ Implements the results synthesizer that aggregates agent outputs.
 **Tasks:** Manual validation plan covering Phases 1–8
 
 Defines a comprehensive manual end-to-end test plan for the backend in the `test` stage, including WebSocket lifecycle, SQS ingestion, DynamoDB writes with TTL, EventBridge trigger to Step Functions, and final synthesis delivery to S3/DynamoDB + WebSocket.
+
+### [Phase 10: Next.js Client WebSocket Integration](./phase-10/)
+**Status:** Ready  
+**Tasks:** 7
+
+Implements a production-ready Next.js client that connects to the AWS API Gateway WebSocket and receives real-time analysis updates using `react-use-websocket` and React Context.
+
+- Task 10.1: Install Client Dependencies
+- Task 10.2: Create WebSocket Context Provider
+- Task 10.3: App-Level Integration
+- Task 10.4: Analysis Dashboard Component
+- Task 10.5: Environment Configuration
+- Task 10.6: Custom Hook: useAnalysisProgress
+- Task 10.7: Testing & Verification
 
 ## End-to-End WebSocket Analysis Flow (once all phases are complete)
 
@@ -217,10 +232,11 @@ sequenceDiagram
 - **State machine orchestration**: `phase-06/task-61-create-step-functions-definition.md`
 - **Agent layer (streaming + progress)**: `phase-07/README.md` (+ tasks 7.3–7.15)
 - **Synthesis + final delivery**: `phase-08/task-81-implement-synthesizer-lambda.md`
+- **Client WebSocket integration**: `phase-10/`
 
 ## Progress Summary
 
-- **Total Phases:** 9
+- **Total Phases:** 10
 - **Total Tasks (Phases 1–8):** 41
 - **Completed Tasks:** 23
 - **In Progress:** 18
