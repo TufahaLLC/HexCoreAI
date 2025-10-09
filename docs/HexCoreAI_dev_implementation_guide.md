@@ -17,7 +17,7 @@ Install required development tools on your local machine.
   - Windows: `choco install aws-sam-cli`
 - [x] Install Node.js 20.x LTS from nodejs.org
 - [x] Verify installation: `node --version` (should show v20.x)
-- [x] Verify npm installation: `npm --version`
+- [x] Verify pnpminstallation: `pnpm--version`
 - [x] Install AWS CLI v2 from aws.amazon.com/cli
 - [x] Verify AWS CLI: `aws --version`
 
@@ -111,7 +111,7 @@ This task sets up TypeScript configuration with all AWS SDK dependencies and bui
 **After completion, verify:**
 - [ ] `package.json` exists with all dependencies
 - [ ] `tsconfig.json` exists with correct compiler options
-- [ ] Run `npm install` to install dependencies
+- [ ] Run `pnpminstall` to install dependencies
 - [ ] Verify no errors during installation
 
 ---
@@ -381,7 +381,7 @@ Test the WebSocket handlers using SAM local.
 **Subtasks:**
 - [ ] Build the TypeScript code:
 ```bash
-npm run build
+pnpmrun build
 ```
 - [ ] Verify `dist/` directory created with compiled JavaScript
 - [ ] Start SAM local API:
@@ -390,7 +390,7 @@ sam local start-api
 ```
 - [ ] Test connection (requires wscat):
 ```bash
-npm install -g wscat
+pnpminstall -g wscat
 wscat -c "ws://localhost:3001?sessionId=test-123&puuid=test-puuid&region=americas&year=2025"
 ```
 - [ ] Verify connection logs in terminal
@@ -426,7 +426,7 @@ Build and validate the match processor implementation.
 **Subtasks:**
 - [ ] Build TypeScript code:
 ```bash
-npm run build
+pnpmrun build
 ```
 - [ ] Check for compilation errors
 - [ ] Verify no TypeScript errors
@@ -581,7 +581,7 @@ Install all Node.js dependencies.
 
 **Subtasks:**
 - [ ] Navigate to project root
-- [ ] Run `npm install`
+- [ ] Run `pnpminstall`
 - [ ] Wait for installation to complete
 - [ ] Verify no errors
 - [ ] Check that `node_modules/` directory is created
@@ -593,7 +593,7 @@ Install all Node.js dependencies.
 Compile all TypeScript code to JavaScript.
 
 **Subtasks:**
-- [ ] Run `npm run build`
+- [ ] Run `pnpmrun build`
 - [ ] Verify build completes successfully
 - [ ] Check that `dist/` directory is created
 - [ ] Verify all subdirectories exist in `dist/`:
@@ -735,7 +735,7 @@ Test the WebSocket API connection flow.
 **Subtasks:**
 - [ ] Install wscat if not already installed:
 ```bash
-npm install -g wscat
+pnpminstall -g wscat
 ```
 
 - [ ] Replace placeholders and connect (use a real PUUID for testing):
@@ -1107,7 +1107,7 @@ fields @timestamp, @message
 - [ ] Update template.yaml with optimized memory values
 - [ ] Redeploy:
 ```bash
-npm run build
+pnpmrun build
 sam deploy
 ```
 
@@ -1810,7 +1810,7 @@ aws resourcegroupstaggingapi get-resources --tag-filters Key=aws:cloudformation:
 
 **Deploy Updates:**
 ```bash
-npm run build && sam deploy
+pnpmrun build && sam deploy
 ```
 
 **View Logs:**
