@@ -2,18 +2,19 @@
 
 ## Overview
 
-The recommended design is a fully serverless, event-driven pipeline: Client initiates a WebSocket connection via API Gateway, triggering match analysis; a Lambda consumes match IDs from SQS in batches of 10 to fetch and filter Riot data, writes filtered slices to DynamoDB, then publishes a "match.filtered.ready" event that starts a Step Functions workflow which fans out to multi-agent analysis. Throughout the entire flow, progress updates are sent back to the client via WebSocket connections. This approach decouples ingestion from analysis, enables robust retries and parallelism, provides real-time progress feedback, and leverages DynamoDB's serverless scalability without VPC cold start penalties.
+The recommended design is a fully serverless, event-driven pipeline: Client initiates a WebSocket connection via API Gateway, triggering match analysis; a Lambda consumes match IDs from SQS in batches of 10 to fetch and filter Riot data, writes filtered slices to DynamoDB, then publishes a "match.filtered.ready" event that starts a Step Functions workflow which fans out to agent orchestrators. Each orchestrator invokes an AWS Bedrock Agent using streaming with trace events for transparent progress, then returns structured results for synthesis. Throughout the entire flow, progress updates are sent back to the client via WebSocket connections. Idempotency and schema validation (AWS Lambda Powertools + Zod) ensure safe retries and correctness. This approach decouples ingestion from analysis, enables robust retries and parallelism, provides real-time progress feedback, and leverages DynamoDB's serverless scalability without VPC cold start penalties.
 
 ## Architecture Diagram
 
 ```
 Client (Next.js)
     ↓
-API Gateway WebSocket API ($connect)
+API Gateway WebSocket API ($connect/$disconnect)
     ↓
 Lambda: WebSocket Connect Handler
-    ├─→ Store connectionId in DynamoDB (Connections table)
-    ├─→ Enqueue match IDs to SQS
+    ├─→ Validate query params (Powertools Parser + Zod)
+    ├─→ Store connectionId in DynamoDB (Connections table, TTL 2h)
+    ├─→ Enqueue match IDs to SQS (Powertools Idempotency)
     └─→ Send initial update: "Processing started"
     ↓
 SQS Standard Queue (with DLQ)
@@ -21,28 +22,34 @@ SQS Standard Queue (with DLQ)
 Lambda: Match Data Processor (batch=10, SQS trigger)
     ├─→ Fetch MATCH-V5 & TIMELINE from Riot API
     ├─→ Filter to agent-required fields
-    ├─→ Write to DynamoDB (MatchData table)
+    ├─→ Write to DynamoDB (MatchData table, TTL 30d)
     ├─→ Publish EventBridge event: "match.filtered.ready"
     └─→ Send WebSocket update: "Data fetching complete (X/Y matches)"
     ↓
 EventBridge
     ↓
-Step Functions (State Machine)
-    ├─→ Parallel execution of agent Lambdas:
-    │   ├─ Build Optimization Agent
-    │   ├─ Combat Analysis Agent
-    │   ├─ Vision Control Agent
-    │   ├─ Economy Management Agent
-    │   ├─ Champion Meta Agent
-    │   └─ Competitive Insight Agent
-    │   (Each agent sends WebSocket update on completion)
-    ├─→ Aggregation & Synthesis Task
-    │   └─→ Send WebSocket update: "Agent analysis X of 6 completed"
-    └─→ Write final results to S3/DynamoDB
-        └─→ Send WebSocket update: "Analysis complete"
+Step Functions (Express)
+    ├─→ Parallel execution of Agent Orchestrator Lambdas:
+    │   ├─ Build Orchestrator → Bedrock Build Agent (streaming traces)
+    │   ├─ Combat Orchestrator → Bedrock Combat Agent (streaming traces)
+    │   ├─ Vision Orchestrator → Bedrock Vision Agent (streaming traces)
+    │   ├─ Economy Orchestrator → Bedrock Economy Agent (streaming traces)
+    │   ├─ Champion Orchestrator → Bedrock Champion Agent (streaming traces)
+    │   └─ Competitive Orchestrator → Bedrock Competitive Agent (streaming traces)
+    │   (Each orchestrator sends rich WebSocket updates: reasoning, tool start/complete)
+    │   └─→ DynamoDB: AgentSessions table (register/complete, TTL 24h)
+    ├─→ Synthesizer Task
+    │   ├─ Aggregate results, generate summary
+    │   ├─ Write full synthesis to S3: results/{puuid}/{matchId}.json
+    │   └─ Write summary metadata to DynamoDB (AnalysisResults, TTL 90d)
+    └─→ Send WebSocket update: "Analysis completed" (+ synthesis payload)
     ↓
 Lambda: WebSocket Disconnect Handler
     └─→ Delete connectionId from DynamoDB
+
+Supporting Tables:
+  • Idempotency (HexCore-Idempotency)
+  • AgentSessions (HexCore-AgentSessions)
 ```
 
 ## Components
@@ -106,10 +113,19 @@ Lambda: WebSocket Disconnect Handler
 - **Schema**:
   - Partition Key: `dataKey` (String) - format: `match:{matchId}:puuid:{puuid}`
   - Attributes: Filtered JSON documents grouped by agent domain (build, combat, vision, economy, championMeta)
-  - TTL: `expiresAt` (7-30 days depending on data retention policy)
+  - TTL: `expiresAt` (30 days)
 - **Capacity**: On-demand mode - scales automatically with agent reads
 - **Read pattern**: Single-digit millisecond latency (adequate for agent processing)
 - **Benefits**: No VPC required, zero cold start penalty, pay-per-request pricing
+
+### DynamoDB: AgentSessions Table
+- **Purpose**: Tracks Bedrock Agent session lifecycle for each orchestrator invocation
+- **Schema**:
+  - Partition Key: `sessionId` (String) - Bedrock session identifier per agent run
+  - Attributes: `agentType`, `userSessionId` (WebSocket session), `matchId`, `createdAt`, `ttl`, `status`, `completedAt`, `errorMessage`
+  - GSI: `UserSessionIndex` on (`userSessionId` HASH, `createdAt` RANGE) for per-user queries
+- **TTL**: 24 hours (automatic cleanup)
+- **Capacity**: On-demand mode
 
 ### EventBridge
 - **Event pattern**: `{"source": ["hexcore.match.processor"], "detail-type": ["match.filtered.ready"]}`
@@ -131,10 +147,10 @@ Lambda: WebSocket Disconnect Handler
 ### Step Functions: Multi-Agent Orchestration
 - **Workflow type**: Express Workflow (high-volume, short-duration)
 - **Structure**:
-  1. **Parallel State**: Fan out to 6 agent Lambdas concurrently
-     - Each agent reads from DynamoDB using provided keys
-     - Agents process independently with 60s timeout per agent
-     - Each agent sends WebSocket update on completion
+  1. **Parallel State**: Fan out to 6 Agent Orchestrator Lambdas concurrently
+     - Each orchestrator reads from DynamoDB using provided keys
+     - Each orchestrator invokes a Bedrock Agent with streaming trace events and sends rich WebSocket updates (reasoning, tool start/complete) within assigned progress windows
+     - Orchestrators register/update session lifecycle in AgentSessions (start, complete/failed)
   2. **Aggregation Task**: Collect and synthesize agent outputs
      - Send WebSocket update: "Synthesizing results"
   3. **Persistence Task**: Write final analysis to S3/DynamoDB
@@ -143,8 +159,8 @@ Lambda: WebSocket Disconnect Handler
 - **Timeout**: 5 minutes total execution time
 - **IAM**: Lambda invoke, DynamoDB read, S3/DynamoDB write, execute-api:ManageConnections
 
-### Agent Lambdas (6 agents)
-Each agent Lambda performs specialized analysis:
+### Agent Orchestrators (6 agents)
+Agent domains:
 
 1. **Build Optimization Agent**: Analyzes itemization paths, build efficiency, power spikes
 2. **Combat Analysis Agent**: Evaluates KDA, damage patterns, combat participation
@@ -153,15 +169,16 @@ Each agent Lambda performs specialized analysis:
 5. **Champion Meta Agent**: Contextualizes performance against champion benchmarks
 6. **Competitive Insight Agent**: Analyzes rank-appropriate strategies and improvement areas
 
-**Agent responsibilities**:
+**Agent orchestrator responsibilities**:
 - Read filtered match data from DynamoDB using provided keys
-- Execute specialized analysis logic (may call Bedrock agents)
-- Look up connectionId from Connections table using sessionId
-- Send progress update via WebSocket: `{"status": "processing", "message": "{AgentName} completed", "progress": X}`
+- Invoke Bedrock Agents with streaming via `invokeBedrockAgentWithTracing` (trace events: pre-processing, rationale, tool invocation start/observation, post-processing)
+- Register/update session lifecycle in `AgentSessions` (register on start, complete/failed on finish)
+- Validate inputs using Zod schemas (Powertools Parser) and guard execution with Powertools Idempotency
+- Send rich WebSocket updates, including tool invocation start/completion and incremental progress within agent windows (e.g., Build 20–35%, Combat 35–50%, Vision 50–65%, Economy 65–75%, Champion 75–85%, Competitive 85–90%)
 - Return structured output to Step Functions
 - **Timeout**: 60 seconds per agent
 - **Memory**: 512-1024 MB depending on analysis complexity
-- **IAM**: DynamoDB read, Bedrock invoke (if applicable), execute-api:ManageConnections
+- **IAM**: DynamoDB read (MatchData, Connections, AgentSessions), Bedrock `InvokeAgent`, execute-api:ManageConnections, Idempotency table access
 
 ### Lambda: WebSocket Disconnect Handler
 - **Trigger**: API Gateway WebSocket `$disconnect` route
@@ -173,9 +190,9 @@ Each agent Lambda performs specialized analysis:
 - **IAM**: DynamoDB DeleteItem
 
 ### Durable Storage (S3/DynamoDB)
-- **S3**: Stores complete analysis reports, raw agent outputs, large artifacts
-- **DynamoDB**: Stores indexed analysis results for quick retrieval, user-facing data
-- **Access pattern**: Results table with userId/puuid keys for efficient queries
+- **S3**: Stores complete synthesis reports at `results/{puuid}/{matchId}.json` (includes all agent results and summary)
+- **DynamoDB (AnalysisResults)**: Stores summary metadata with 90-day TTL (`expiresAt`) and `resultId = {puuid}-{matchId}-{timestamp}` for quick retrieval
+- **Access pattern**: Query by `puuid` and/or `resultId` for efficient client lookups; idempotent writes with conditional expressions
 
 ## End-to-End Flow
 
@@ -207,12 +224,12 @@ SQS delivers batch of 10 messages to Match Processor Lambda:
 ### Step 3: Agent Orchestration
 ```
 EventBridge triggers Step Functions per match:
-  - Parallel state invokes 6 agent Lambdas
-  - Each agent:
+  - Parallel state invokes 6 Agent Orchestrator Lambdas
+  - Each orchestrator:
     → Reads from DynamoDB using keys
-    → Performs analysis
-    → Queries Connections table for connectionId
-    → Sends WebSocket: {"status": "processing", "agent": "BuildOptimization", "message": "Build analysis complete", "progress": 50}
+    → Invokes Bedrock Agent with streaming trace events (pre-processing, rationale, tool invocation start/observation, post-processing)
+    → Registers session start and marks complete/failed in AgentSessions
+    → Sends rich WebSocket updates within allocated progress ranges (e.g., Build 20–35%, Combat 35–50%, Vision 50–65%, Economy 65–75%, Champion 75–85%, Competitive 85–90%)
   - Aggregation synthesizes outputs
   - Send WebSocket: {"status": "processing", "message": "Synthesizing insights", "progress": 90}
 ```
@@ -222,7 +239,7 @@ EventBridge triggers Step Functions per match:
 Step Functions final task:
   - Write results to S3/DynamoDB
   - Query Connections table for connectionId
-  - Send WebSocket: {"status": "complete", "message": "Analysis complete", "resultId": "{id}", "progress": 100}
+  - Send WebSocket: {"status": "completed", "message": "Analysis complete", "resultId": "{id}", "s3Key": "results/{puuid}/{matchId}.json", "progress": 100, "synthesis": { "agents": [...], "summary": { "overallScore": 75.5 } }}
   - (Optional) Close WebSocket connection programmatically via DeleteConnectionCommand
     ↓
 Client closes connection or 2-hour timeout triggers:
@@ -300,13 +317,70 @@ Client closes connection or 2-hour timeout triggers:
 ### WebSocket Message Schema
 ```json
 {
-  "status": "processing|complete|error",
+  "status": "started|processing|completed|error",
   "message": "Human-readable progress update",
   "progress": 45,
-  "agent": "BuildOptimization (optional)",
+  "agent": "BuildAgent|CombatAgent|VisionAgent|EconomyAgent|ChampionAgent|CompetitiveAgent|Synthesizer (optional)",
   "totalMatches": 87,
   "processedMatches": 40,
-  "resultId": "uuid (on completion)"
+  "resultId": "<puuid>-<matchId>-<ts> (on completion)",
+  "s3Key": "results/<puuid>/<matchId>.json (on completion)",
+  "toolInvocation": { "tool": "getMatchBuildData", "status": "started|completed", "parameters": {"...": "..."}, "resultPreview": "..." },
+  "synthesis": { "agents": [...], "summary": { "overallScore": 75.5 } },
+  "timestamp": 1704067200000
+}
+```
+
+### Synthesizer Input Schema
+```json
+{
+  "sessionId": "uuid-v4",
+  "matchId": "NA1_4567890123",
+  "puuid": "abc123...",
+  "agentResults": [
+    { "agentName": "BuildAgent", "status": "success", "analysis": "...", "timestamp": 1704067200000 },
+    { "agentName": "CombatAgent", "status": "success", "analysis": "...", "timestamp": 1704067201000 }
+  ]
+}
+```
+
+### S3 Results Object Structure
+```json
+{
+  "matchId": "NA1_4567890123",
+  "puuid": "player-uuid",
+  "timestamp": 1234567890,
+  "agents": [
+    {
+      "agentName": "BuildAgent",
+      "status": "success",
+      "analysis": "...",
+      "timestamp": 1234567890,
+      "toolsInvoked": ["getMatchBuildData", "analyzeBuildEfficiency"]
+    }
+  ],
+  "summary": {
+    "overallScore": 75.5,
+    "strengths": ["Vision control", "Economic efficiency"],
+    "improvements": ["Combat positioning", "Build adaptation"]
+  }
+}
+```
+
+### DynamoDB AnalysisResults Record
+```json
+{
+  "resultId": "player-uuid-NA1_4567890123-1234567890",
+  "puuid": "player-uuid",
+  "matchId": "NA1_4567890123",
+  "s3Key": "results/player-uuid/NA1_4567890123.json",
+  "summary": {
+    "overallScore": 75.5,
+    "strengths": ["Vision control", "Economic efficiency"],
+    "improvements": ["Combat positioning", "Build adaptation"]
+  },
+  "createdAt": 1234567890,
+  "expiresAt": 1242343890
 }
 ```
 
@@ -343,6 +417,14 @@ Client closes connection or 2-hour timeout triggers:
   - TTL enabled on `expiresAt` attribute
   - Point-in-time recovery: Enabled
 
+### Bedrock Agent Streaming & Traces
+- **Environment**: `ENABLE_BEDROCK_TRACES=true|false` to toggle streaming trace events (production: true for UX, testing: false to reduce cost)
+- **Streaming handlers**: process pre-processing, rationale, tool invocation start/observation, and post-processing events for rich client updates
+
+### Lambda Powertools (Idempotency & Parser)
+- **Idempotency**: All critical Lambdas (connect, match-processor, agent orchestrators, synthesizer) use Powertools Idempotency with DynamoDB table `HexCore-Idempotency` (`IDEMPOTENCY_TABLE` env var)
+- **Parser + Zod**: Validate WebSocket params, SQS messages, EventBridge events, orchestrator inputs, and outgoing WebSocket payloads
+
 ### Step Functions
 - **Workflow type**: Express (sub-5 minute executions)
 - **Timeout**: 300 seconds (5 minutes)
@@ -373,9 +455,9 @@ Client closes connection or 2-hour timeout triggers:
 - Send error messages to client on catastrophic failures
 
 ### Idempotency
-- DynamoDB conditional writes using matchId+puuid keys
-- SQS message deduplication via content-based deduplication (not FIFO)
-- Agent outputs versioned to handle retries safely
+- Powertools Idempotency with DynamoDB (`HexCore-Idempotency`) across connect, match processing, agent orchestrators, and synthesizer
+- S3 write + DynamoDB write for synthesis use conditional expressions and rollback S3 on DynamoDB failure
+- Agent outputs versioned to handle retries safely; SQS remains Standard (content-based deduplication not enabled)
 
 ## Security and IAM
 
@@ -421,7 +503,7 @@ Client closes connection or 2-hour timeout triggers:
 }
 ```
 
-**Agent Lambdas**:
+**Agent Orchestrators**:
 ```json
 {
   "Effect": "Allow",
@@ -436,6 +518,24 @@ Client closes connection or 2-hour timeout triggers:
     "arn:aws:dynamodb:region:account:table/Connections*",
     "arn:aws:bedrock:region:account:agent/*",
     "arn:aws:execute-api:region:account:api-id/*"
+  ]
+}
+```
+
+**Shared Tables (Idempotency & AgentSessions)**:
+```json
+{
+  "Effect": "Allow",
+  "Action": [
+    "dynamodb:PutItem",
+    "dynamodb:UpdateItem",
+    "dynamodb:GetItem",
+    "dynamodb:Query"
+  ],
+  "Resource": [
+    "arn:aws:dynamodb:region:account:table/HexCore-Idempotency",
+    "arn:aws:dynamodb:region:account:table/HexCore-AgentSessions",
+    "arn:aws:dynamodb:region:account:table/HexCore-AgentSessions/index/*"
   ]
 }
 ```
@@ -509,6 +609,10 @@ logger.info("Processing match", { stage: "data_fetch", progress: "10/87" });
 - Propagate through SQS message attributes, EventBridge events, Step Functions input
 - Include in all logs and WebSocket messages for end-to-end traceability
 
+### Session Metrics
+- CloudWatch dashboard for AgentSessions table activity (read/write capacity)
+- Monitor counts of active/completed/failed sessions per user session
+
 ## Performance Notes
 
 ### Batching Strategy
@@ -529,13 +633,17 @@ logger.info("Processing match", { stage: "data_fetch", progress: "10/87" });
 
 ### Lambda Cold Starts
 - **Match Processor**: ~1-2 second cold start (no VPC)
-- **Agent Lambdas**: ~500ms-1s cold start (no VPC)
+- **Agent Orchestrators**: ~500ms-1s cold start (no VPC)
 - **Mitigation**: Use provisioned concurrency for critical paths if needed
 
 ### Caching Strategy
-- **DynamoDB TTL**: Expire filtered match data after 7-30 days
+- **DynamoDB TTL**: Expire filtered match data after 30 days
 - **Connection TTL**: Expire stale WebSocket connections after 2 hours
 - **Client-side caching**: Cache analysis results in browser/app for instant re-access
+
+### Bedrock Traces Cost
+- Streaming trace events improve UX but increase token usage by ~20–30%
+- Toggle with `ENABLE_BEDROCK_TRACES` per environment to balance cost vs. transparency
 
 ## Scalability
 
@@ -657,16 +765,21 @@ exports.handler = async (event) => {
 ### Infrastructure Setup
 - [ ] Create API Gateway WebSocket API with $connect, $disconnect routes
 - [ ] Create DynamoDB Connections table with SessionIndex GSI and TTL
-- [ ] Create DynamoDB MatchData table with TTL
+- [ ] Create DynamoDB MatchData table with TTL (30d)
+- [ ] Create DynamoDB AnalysisResults table with TTL (90d)
+- [ ] Create DynamoDB Idempotency table: `HexCore-Idempotency` (TTL on `expiration`)
+- [ ] Create DynamoDB AgentSessions table: `HexCore-AgentSessions` (TTL 24h, GSI on UserSessionIndex)
 - [ ] Create SQS standard queue with DLQ
 - [ ] Create EventBridge rule for match.filtered.ready
-- [ ] Create Step Functions state machine with parallel agent tasks
-- [ ] Deploy 6 agent Lambda functions
+- [ ] Create Step Functions state machine with parallel agent orchestrator tasks + Synthesizer
+- [ ] Define Bedrock Agents and Action Groups for 6 domains (Build, Combat, Vision, Economy, Champion, Competitive)
+- [ ] Deploy 6 Agent Orchestrator Lambdas (invoke Bedrock Agents)
+- [ ] Deploy Synthesizer Lambda
 - [ ] Deploy Match Processor Lambda with SQS trigger
 - [ ] Deploy WebSocket Connect/Disconnect Lambdas
-- [ ] Configure IAM roles with least-privilege permissions
+- [ ] Configure IAM roles with least-privilege permissions (including Bedrock, Idempotency, AgentSessions)
 - [ ] Store Riot API key in Secrets Manager
-- [ ] Set up CloudWatch alarms and dashboards
+- [ ] Set up CloudWatch alarms and dashboards (including AgentSessions)
 - [ ] Enable X-Ray tracing on all Lambdas
 
 ### Testing
@@ -676,7 +789,7 @@ exports.handler = async (event) => {
 - [ ] Test partial batch failure handling
 - [ ] Verify DLQ redrive behavior
 - [ ] Test Step Functions error handling and retries
-- [ ] Validate WebSocket updates reach client
+- [ ] Validate WebSocket updates reach client (including trace-driven tool progress)
 - [ ] Test connection cleanup and TTL expiration
 - [ ] Performance test with 100+ matches
 - [ ] Chaos testing (inject API failures, throttling)

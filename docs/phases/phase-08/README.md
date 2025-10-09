@@ -4,7 +4,7 @@
 
 Phase 8 implements the **Synthesizer Lambda** end-to-end: provisioning infrastructure, aggregating all agent analysis results from Phase 7, persisting them to S3 and DynamoDB, and delivering the final synthesis to the client via WebSocket.
 
-**Total Tasks**: 3 tasks  
+**Total Tasks**: 4 tasks  
 **Current Status**: 🔄 In Progress
 
 ---
@@ -75,7 +75,7 @@ Step Functions (Phase 7 Complete)
 
 ## Tasks Overview
 
-Together these three tasks deliver the complete Synthesizer Lambda flow: infrastructure scaffolding (Task 8.1), aggregation + storage core (Task 8.2), and handler + client delivery (Task 8.3).
+Together these tasks deliver the complete Synthesizer Lambda flow: infrastructure scaffolding (Task 8.1), aggregation + storage core (Task 8.2), handler + client delivery (Task 8.3), and cached-result reuse (Task 8.4).
 
 ### Task 8.1: Configure Synthesizer Infrastructure 🔄
 
@@ -111,6 +111,19 @@ Together these three tasks deliver the complete Synthesizer Lambda flow: infrast
 - ✅ Add structured logging and correlation IDs throughout the handler
 
 **[View Task Details →](./task-83-finalize-synthesizer-handler.md)**
+
+### Task 8.4: Enable Cached Analysis Short-Circuit 🔄
+
+**Scope**: Allow the WebSocket connect handler to reuse previous analysis results instead of reprocessing the entire pipeline when the same `puuid`/`region`/`year` already completed.
+
+**Key Actions**:
+- ✅ Query `AnalysisResultsTable` (by `puuid` + time scope) before enqueuing new work
+- ✅ Retrieve existing synthesis metadata and payload from S3 when present
+- ✅ Send a WebSocket message indicating analysis reuse with `resultId`, `s3Key`, and cached synthesis details
+- ✅ Return a successful response without publishing new SQS messages or triggering downstream agents
+- ✅ Preserve existing behavior when no cached result is found
+
+**[View Task Details →](./task-84-enable-cached-analysis-shortcut.md)**
 
 ---
 
