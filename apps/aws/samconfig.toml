@@ -2,3 +2,14 @@
 # This file will be configured during deployment setup
 
 version = 0.1
+[default]
+[default.deploy]
+[default.deploy.parameters]
+stack_name = "hexcore-ai-test"
+s3_bucket = "hexcore-ai-deployment-thahashahz-dev"
+s3_prefix = "hexcore-ai-test"
+region = "us-west-2"
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = "Stage=test RiotApiKeySecretName=riot-api-key"
+confirm_changeset = true
+resolve_image_repos = true  # Auto-create ECR repos if needed

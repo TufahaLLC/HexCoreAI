@@ -14,11 +14,15 @@ Globals:
       - arm64
     Environment:
       Variables:
-        RIOT_API_KEY_SECRET: !Ref RiotApiKeySecretArn
+        RIOT_API_KEY_SECRET: !Ref RiotApiKeySecretName
         CONNECTIONS_TABLE: !Ref ConnectionsTable
         MATCH_DATA_TABLE: !Ref MatchDataTable
         MATCH_QUEUE_URL: !Ref MatchQueue
         WEBSOCKET_ENDPOINT: !Sub 'https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}'
+        IDEMPOTENCY_TABLE: !Ref IdempotencyTable
+        POWERTOOLS_SERVICE_NAME: hexcore-ai
+        POWERTOOLS_METRICS_NAMESPACE: HexCoreAI
+        AWS_LAMBDA_LOG_LEVEL: info
     Tracing: Active
 
 # ==================== Parameters ====================
@@ -27,13 +31,28 @@ Parameters:
     Type: String
     Default: test
     Description: API Gateway stage name
-  RiotApiKeySecretArn:
+  RiotApiKeySecretName:
     Type: String
-    Description: ARN of Secrets Manager secret containing Riot API key
+    Description: Name of Secrets Manager secret containing Riot API key
 
 # ==================== Resources ====================
 Resources:
   # ==================== DynamoDB Tables ====================
+  IdempotencyTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: HexCore-Idempotency
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expiration
+        Enabled: true
+
   ConnectionsTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -200,6 +219,8 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref ConnectionsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref IdempotencyTable
         - SQSSendMessagePolicy:
             QueueName: !GetAtt MatchQueue.QueueName
         - Statement:
@@ -210,7 +231,7 @@ Resources:
             - Effect: Allow
               Action:
                 - secretsmanager:GetSecretValue
-              Resource: !Ref RiotApiKeySecretArn
+              Resource: !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${RiotApiKeySecretName}*
 
   WebSocketConnectPermission:
     Type: AWS::Lambda::Permission
@@ -244,7 +265,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: HexCore-Match-Processor
-      Handler: processor/matchProcessor.handler
+      Handler: processor/match-processor.handler
       CodeUri: ./dist
       Timeout: 60
       MemorySize: 1024
@@ -265,6 +286,8 @@ Resources:
             TableName: !Ref MatchDataTable
         - DynamoDBCrudPolicy:
             TableName: !Ref ConnectionsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref IdempotencyTable
         - Statement:
             - Effect: Allow
               Action:
@@ -277,167 +300,15 @@ Resources:
             - Effect: Allow
               Action:
                 - secretsmanager:GetSecretValue
-              Resource: !Ref RiotApiKeySecretArn
+              Resource: !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${RiotApiKeySecretName}*
 
-  # ==================== Agent Lambda Functions ====================
-  BuildAgentFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: HexCore-BuildAgent
-      Handler: agents/buildAgent.handler
-      CodeUri: ./dist
-      Timeout: 60
-      MemorySize: 512
-      Policies:
-        - DynamoDBReadPolicy:
-            TableName: !Ref MatchDataTable
-        - DynamoDBCrudPolicy:
-            TableName: !Ref ConnectionsTable
-        - Statement:
-            - Effect: Allow
-              Action:
-                - execute-api:ManageConnections
-              Resource: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*
-            - Effect: Allow
-              Action:
-                - bedrock:InvokeAgent
-              Resource: '*'
+  # ==================== Synthesizer Lambda Function ====================
+  # NOTE: Synthesizer function will be added in Task 8.1 (Phase 8)
+  # This function aggregates all agent results and sends final analysis
 
-  CombatAgentFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: HexCore-CombatAgent
-      Handler: agents/combatAgent.handler
-      CodeUri: ./dist
-      Timeout: 60
-      MemorySize: 512
-      Policies:
-        - DynamoDBReadPolicy:
-            TableName: !Ref MatchDataTable
-        - DynamoDBCrudPolicy:
-            TableName: !Ref ConnectionsTable
-        - Statement:
-            - Effect: Allow
-              Action:
-                - execute-api:ManageConnections
-              Resource: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*
-            - Effect: Allow
-              Action:
-                - bedrock:InvokeAgent
-              Resource: '*'
-
-  VisionAgentFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: HexCore-VisionAgent
-      Handler: agents/visionAgent.handler
-      CodeUri: ./dist
-      Timeout: 60
-      MemorySize: 512
-      Policies:
-        - DynamoDBReadPolicy:
-            TableName: !Ref MatchDataTable
-        - DynamoDBCrudPolicy:
-            TableName: !Ref ConnectionsTable
-        - Statement:
-            - Effect: Allow
-              Action:
-                - execute-api:ManageConnections
-              Resource: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*
-            - Effect: Allow
-              Action:
-                - bedrock:InvokeAgent
-              Resource: '*'
-
-  EconomyAgentFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: HexCore-EconomyAgent
-      Handler: agents/economyAgent.handler
-      CodeUri: ./dist
-      Timeout: 60
-      MemorySize: 512
-      Policies:
-        - DynamoDBReadPolicy:
-            TableName: !Ref MatchDataTable
-        - DynamoDBCrudPolicy:
-            TableName: !Ref ConnectionsTable
-        - Statement:
-            - Effect: Allow
-              Action:
-                - execute-api:ManageConnections
-              Resource: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*
-            - Effect: Allow
-              Action:
-                - bedrock:InvokeAgent
-              Resource: '*'
-
-  ChampionAgentFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: HexCore-ChampionAgent
-      Handler: agents/championAgent.handler
-      CodeUri: ./dist
-      Timeout: 60
-      MemorySize: 512
-      Policies:
-        - DynamoDBReadPolicy:
-            TableName: !Ref MatchDataTable
-        - DynamoDBCrudPolicy:
-            TableName: !Ref ConnectionsTable
-        - Statement:
-            - Effect: Allow
-              Action:
-                - execute-api:ManageConnections
-              Resource: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*
-            - Effect: Allow
-              Action:
-                - bedrock:InvokeAgent
-              Resource: '*'
-
-  CompetitiveAgentFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: HexCore-CompetitiveAgent
-      Handler: agents/competitiveAgent.handler
-      CodeUri: ./dist
-      Timeout: 60
-      MemorySize: 512
-      Policies:
-        - DynamoDBReadPolicy:
-            TableName: !Ref MatchDataTable
-        - DynamoDBCrudPolicy:
-            TableName: !Ref ConnectionsTable
-        - Statement:
-            - Effect: Allow
-              Action:
-                - execute-api:ManageConnections
-              Resource: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*
-            - Effect: Allow
-              Action:
-                - bedrock:InvokeAgent
-              Resource: '*'
-
-  SynthesizerFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: HexCore-Synthesizer
-      Handler: aggregation/synthesizer.handler
-      CodeUri: ./dist
-      Timeout: 60
-      MemorySize: 1024
-      Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref AnalysisResultsTable
-        - DynamoDBCrudPolicy:
-            TableName: !Ref ConnectionsTable
-        - S3CrudPolicy:
-            BucketName: !Ref ResultsBucket
-        - Statement:
-            - Effect: Allow
-              Action:
-                - execute-api:ManageConnections
-              Resource: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*
+  # ==================== Agent Orchestrator Lambda Functions ====================
+  # NOTE: Orchestrator functions will be added in Task 7.2.6
+  # These functions invoke Bedrock Agents and manage agent sessions
 
   # ==================== EventBridge ====================
   MatchFilteredReadyRule:
@@ -483,29 +354,8 @@ Resources:
       Name: HexCore-MultiAgent-Orchestration
       Type: EXPRESS
       DefinitionUri: statemachine/multi-agent-orchestration.asl.json
-      DefinitionSubstitutions:
-        BuildAgentFunctionArn: !GetAtt BuildAgentFunction.Arn
-        CombatAgentFunctionArn: !GetAtt CombatAgentFunction.Arn
-        VisionAgentFunctionArn: !GetAtt VisionAgentFunction.Arn
-        EconomyAgentFunctionArn: !GetAtt EconomyAgentFunction.Arn
-        ChampionAgentFunctionArn: !GetAtt ChampionAgentFunction.Arn
-        CompetitiveAgentFunctionArn: !GetAtt CompetitiveAgentFunction.Arn
-        SynthesizerFunctionArn: !GetAtt SynthesizerFunction.Arn
-      Policies:
-        - LambdaInvokePolicy:
-            FunctionName: !Ref BuildAgentFunction
-        - LambdaInvokePolicy:
-            FunctionName: !Ref CombatAgentFunction
-        - LambdaInvokePolicy:
-            FunctionName: !Ref VisionAgentFunction
-        - LambdaInvokePolicy:
-            FunctionName: !Ref EconomyAgentFunction
-        - LambdaInvokePolicy:
-            FunctionName: !Ref ChampionAgentFunction
-        - LambdaInvokePolicy:
-            FunctionName: !Ref CompetitiveAgentFunction
-        - LambdaInvokePolicy:
-            FunctionName: !Ref SynthesizerFunction
+      # NOTE: DefinitionSubstitutions will be added in Task 7.2.7
+      # NOTE: Policies will be added in Task 7.2.7
       Tracing:
         Enabled: true
       Logging:
@@ -575,3 +425,7 @@ Outputs:
   ResultsBucketName:
     Description: Results S3 bucket name
     Value: !Ref ResultsBucket
+  
+  IdempotencyTableName:
+    Description: Idempotency DynamoDB table name
+    Value: !Ref IdempotencyTable
