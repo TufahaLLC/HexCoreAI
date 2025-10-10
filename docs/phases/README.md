@@ -30,7 +30,8 @@ phases/
 ├── phase-07/          # Agent Lambda Functions
 ├── phase-08/          # Results Aggregation & Synthesis
 ├── phase-09/          # User Validation & Testing
-└── phase-10/          # Client Web App (Next.js) WebSocket Integration
+├── phase-10/          # Client Web App (Next.js) WebSocket Integration
+└── phase-11/          # Multi-Agent System Expansion with Third-Party API Integration
 ```
 
 ## Phase Overview
@@ -130,6 +131,18 @@ Implements a production-ready Next.js client that connects to the AWS API Gatewa
 - Task 10.5: Environment Configuration
 - Task 10.6: Custom Hook: useAnalysisProgress
 - Task 10.7: Testing & Verification
+
+### [Phase 11: Multi-Agent System Expansion with Third-Party API Integration](./phase-11/)
+**Status:** Pending  
+**Tasks:** 5
+
+Integrates community data sources (U.GG, OP.GG, Community Dragon, Data Dragon, LoLalytics, Mobalytics) to enhance agent analysis with meta-aware insights, benchmarking, and matchup intelligence.
+
+- Task 11.1: Update Existing Agent Action Groups with External API Integration
+- Task 11.2: Define and Configure New Specialized Agents
+- Task 11.3: Implement Action Groups for New Specialized Agents
+- Task 11.4: Implement Orchestrators for New Specialized Agents
+- Task 11.5: Updated Riot API Client Module
 
 ## End-to-End WebSocket Analysis Flow (once all phases are complete)
 
@@ -236,7 +249,7 @@ sequenceDiagram
 
 ## Progress Summary
 
-- **Total Phases:** 10
+- **Total Phases:** 11
 - **Total Tasks (Phases 1–8):** 41
 - **Completed Tasks:** 23
 - **In Progress:** 18
