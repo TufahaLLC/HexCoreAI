@@ -7,6 +7,7 @@ export const TWO_HOURS_IN_SECONDS = 7200;
 export const MILLISECONDS_TO_SECONDS = 1000;
 export const MILLISECONDS_PER_MINUTE = 60_000;
 export const PERCENTAGE_MULTIPLIER = 100;
+export const RADIX_DECIMAL = 10;
 
 // Agent calculation constants
 export const MIN_DEATHS_FOR_KDA = 1;

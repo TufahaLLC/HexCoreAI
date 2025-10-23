@@ -1,6 +1,6 @@
 # Task 7.2: Define Phase 7 Bedrock Resources in SAM Template
 
-**Status**: 🔄 Pending
+**Status**: ✅ Complete
 
 ## Overview
 
@@ -26,10 +26,10 @@ Author the **canonical SAM template definitions** for every AWS resource require
 
 Create service roles that Bedrock agents will assume.
 
-- [ ] Create `BedrockAgentServiceRole` with trust policy for bedrock.amazonaws.com
-- [ ] Add policy to invoke foundation models
-- [ ] Add policy to invoke Lambda action groups
-- [ ] Add CloudWatch Logs permissions
+- [x] Create `BedrockAgentServiceRole` with trust policy for bedrock.amazonaws.com
+- [x] Add policy to invoke foundation models
+- [x] Add policy to invoke Lambda action groups
+- [x] Add CloudWatch Logs permissions
 
 **SAM Template (IAM Roles):**
 ```yaml
@@ -77,15 +77,15 @@ Resources:
 
 Create Lambda functions that serve as tools for Bedrock Agents.
 
-- [ ] Define BuildAgentActionGroupFunction
-- [ ] Define CombatAgentActionGroupFunction
-- [ ] Define VisionAgentActionGroupFunction
-- [ ] Define EconomyAgentActionGroupFunction
-- [ ] Define ChampionAgentActionGroupFunction
-- [ ] Define CompetitiveAgentActionGroupFunction
-- [ ] Add DynamoDB read policies
-- [ ] Add CloudWatch Logs permissions
-- [ ] Configure esbuild metadata for TypeScript compilation
+- [x] Define BuildAgentActionGroupFunction
+- [x] Define CombatAgentActionGroupFunction
+- [x] Define VisionAgentActionGroupFunction
+- [x] Define EconomyAgentActionGroupFunction
+- [x] Define ChampionAgentActionGroupFunction
+- [x] Define CompetitiveAgentActionGroupFunction
+- [x] Add DynamoDB read policies
+- [x] Add CloudWatch Logs permissions
+- [x] Configure esbuild metadata for TypeScript compilation
 
 **Example SAM Template (Action Group Function):**
 ```yaml
@@ -121,9 +121,9 @@ Create Lambda functions that serve as tools for Bedrock Agents.
 
 Allow Bedrock agents to invoke action group Lambda functions.
 
-- [ ] Add Lambda permissions for each action group function
-- [ ] Set principal to bedrock.amazonaws.com
-- [ ] Scope permissions to agent ARNs
+- [x] Add Lambda permissions for each action group function
+- [x] Set principal to bedrock.amazonaws.com
+- [x] Scope permissions to agent ARNs
 
 **SAM Template (Lambda Permissions):**
 ```yaml
@@ -141,14 +141,14 @@ Allow Bedrock agents to invoke action group Lambda functions.
 
 Create Bedrock Agent resources with action groups and specialized instructions.
 
-- [ ] Define BuildAnalysisAgent with build optimization instruction
-- [ ] Define CombatAnalysisAgent with combat performance instruction
-- [ ] Define VisionAnalysisAgent with vision control instruction
-- [ ] Define EconomyAnalysisAgent with resource management instruction
-- [ ] Define ChampionAnalysisAgent with champion mastery instruction
-- [ ] Define CompetitiveAnalysisAgent with rank progression instruction
-- [ ] Configure action groups with function schemas
-- [ ] Enable auto-prepare for automatic updates
+- [x] Define BuildAnalysisAgent with build optimization instruction
+- [x] Define CombatAnalysisAgent with combat performance instruction
+- [x] Define VisionAnalysisAgent with vision control instruction
+- [x] Define EconomyAnalysisAgent with resource management instruction
+- [x] Define ChampionAnalysisAgent with champion mastery instruction
+- [x] Define CompetitiveAnalysisAgent with rank progression instruction
+- [x] Configure action groups with function schemas
+- [x] Enable auto-prepare for automatic updates
 
 **Example SAM Template (Bedrock Agent):**
 ```yaml
@@ -210,9 +210,9 @@ Create Bedrock Agent resources with action groups and specialized instructions.
 
 Create versioned aliases for testing and production environments.
 
-- [ ] Create production aliases for all agents
-- [ ] Create testing aliases for all agents
-- [ ] Configure alias routing policies
+- [x] Create production aliases for all agents
+- [x] Create testing aliases for all agents
+- [x] Configure alias routing policies
 
 **SAM Template (Agent Aliases):**
 ```yaml
@@ -237,10 +237,10 @@ Create versioned aliases for testing and production environments.
 
 Add shared persistence and configuration elements required by orchestrators, action groups, and session management utilities.
 
-- [ ] Define `AgentSessionsTable` with TTL support for automatic cleanup
-- [ ] Confirm existing `MatchDataTable` and `ConnectionsTable` references resolve correctly
-- [ ] Expose table names and environment flags via SAM parameters and function environment variables
-- [ ] Tag shared resources for Phase 7 cost tracking
+- [x] Define `AgentSessionsTable` with TTL support for automatic cleanup
+- [x] Confirm existing `MatchDataTable` and `ConnectionsTable` references resolve correctly
+- [x] Expose table names and environment flags via SAM parameters and function environment variables
+- [x] Tag shared resources for Phase 7 cost tracking
 
 **SAM Template (Shared Data Stores & Parameters):**
 ```yaml
@@ -291,14 +291,14 @@ Add shared persistence and configuration elements required by orchestrators, act
 Define agent orchestrator Lambda functions in the SAM template and implement them to invoke Bedrock Agents.
 
 **SAM Template Definition:**
-- [ ] Define BuildAgentOrchestratorFunction
-- [ ] Define CombatAgentOrchestratorFunction
-- [ ] Define VisionAgentOrchestratorFunction
-- [ ] Define EconomyAgentOrchestratorFunction
-- [ ] Define ChampionAgentOrchestratorFunction
-- [ ] Define CompetitiveAgentOrchestratorFunction
-- [ ] Add bedrock:InvokeAgent permissions
-- [ ] Add environment variables for agent IDs and alias IDs
+- [x] Define BuildAgentOrchestratorFunction
+- [x] Define CombatAgentOrchestratorFunction
+- [x] Define VisionAgentOrchestratorFunction
+- [x] Define EconomyAgentOrchestratorFunction
+- [x] Define ChampionAgentOrchestratorFunction
+- [x] Define CompetitiveAgentOrchestratorFunction
+- [x] Add bedrock:InvokeAgent permissions
+- [x] Add environment variables for agent IDs and alias IDs
 
 **Example SAM Template (Orchestrator Function):**
 ```yaml
@@ -353,8 +353,8 @@ Define agent orchestrator Lambda functions in the SAM template and implement the
 
 Update the state machine (defined in Task 2.8) to add orchestrator function references.
 
-- [ ] Add DefinitionSubstitutions with orchestrator function ARNs
-- [ ] Add Lambda invoke policies for all orchestrator functions
+- [x] Add DefinitionSubstitutions with orchestrator function ARNs
+- [x] Add Lambda invoke policies for all orchestrator functions
 
 **SAM Template (Add to MultiAgentStateMachine from Task 2.8):**
 ```yaml
@@ -395,9 +395,9 @@ Update the state machine (defined in Task 2.8) to add orchestrator function refe
 
 Add outputs for easy reference to agent IDs and alias IDs.
 
-- [ ] Add outputs for each agent ID
-- [ ] Add outputs for each agent ARN
-- [ ] Add outputs for production and testing alias IDs
+- [x] Add outputs for each agent ID
+- [x] Add outputs for each agent ARN
+- [x] Add outputs for production and testing alias IDs
 
 **SAM Template (Outputs):**
 ```yaml
@@ -477,15 +477,15 @@ players understand their competitive trajectory and readiness for higher ranks.
 
 ### Pre-Deployment Checks
 
-- [ ] All 6 Bedrock Agents defined
-- [ ] All 6 Action Group Lambda functions defined
-- [ ] All 6 Orchestrator Lambda functions defined
-- [ ] All Lambda permissions granted
-- [ ] All agent aliases created (prod + test)
-- [ ] IAM roles properly configured
-- [ ] Environment variables set correctly
-- [ ] State machine updated with new ARNs
-- [ ] Outputs defined for all agents
+- [x] All 6 Bedrock Agents defined
+- [x] All 6 Action Group Lambda functions defined
+- [x] All 6 Orchestrator Lambda functions defined
+- [x] All Lambda permissions granted
+- [x] All agent aliases created (prod + test)
+- [x] IAM roles properly configured
+- [x] Environment variables set correctly
+- [x] State machine updated with new ARNs
+- [x] Outputs defined for all agents
 
 ### Post-Deployment Validation
 

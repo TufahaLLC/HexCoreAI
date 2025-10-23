@@ -1,6 +1,6 @@
 # Task 7.4: Implement Action Group Tools - Combat Agent
 
-**Status**: 🔄 Pending
+**Status**: ✅ Completed
 
 ## Overview
 
@@ -12,21 +12,22 @@ Implement the Combat Analysis Action Group handler using AWS Lambda Powertools f
 
 ### 7.4.1: Create combat-tools.ts File
 
-- [ ] Create `apps/aws/src/agents/action-groups/combat-tools.ts`
-- [ ] Import AWS Powertools dependencies
-- [ ] Initialize Logger, Tracer, and BedrockAgentFunctionResolver
-- [ ] Set up DynamoDB client
+- [x] Create `apps/aws/src/agents/action-groups/combat-tools.ts`
+- [x] Import AWS Powertools dependencies
+- [x] Initialize Logger, Tracer, and BedrockAgentFunctionResolver
+- [x] Set up DynamoDB client
 
 ### 7.4.2: Implement getMatchCombatData Tool
 
 Retrieve combat statistics from DynamoDB.
 
-- [ ] Define tool with parameters: `matchId`, `puuid`
-- [ ] Query MatchDataTable for combat data
-- [ ] Extract KDA, damage dealt/received
-- [ ] Return structured combat information
+- [x] Define tool with parameters: `matchId`, `puuid`
+- [x] Query MatchDataTable for combat data
+- [x] Extract KDA, damage dealt/received
+- [x] Return structured combat information
 
 **Tool Output:**
+
 ```typescript
 {
   matchId: string;
@@ -53,13 +54,14 @@ Retrieve combat statistics from DynamoDB.
 
 Analyze damage patterns and combat effectiveness.
 
-- [ ] Accept damage dealt and received objects
-- [ ] Calculate damage ratio (dealt/received)
-- [ ] Compute damage type breakdown percentages
-- [ ] Evaluate survivability rating
-- [ ] Generate damage recommendations
+- [x] Accept damage dealt and received objects
+- [x] Calculate damage ratio (dealt/received)
+- [x] Compute damage type breakdown percentages
+- [x] Evaluate survivability rating
+- [x] Generate damage recommendations
 
 **Tool Output:**
+
 ```typescript
 {
   totalDamageDealt: number;
@@ -81,12 +83,13 @@ Analyze damage patterns and combat effectiveness.
 
 Evaluate player performance in teamfights.
 
-- [ ] Accept KDA object and kill participation percentage
-- [ ] Calculate KDA ratio
-- [ ] Determine performance rating
-- [ ] Identify strengths and improvement areas
+- [x] Accept KDA object and kill participation percentage
+- [x] Calculate KDA ratio
+- [x] Determine performance rating
+- [x] Identify strengths and improvement areas
 
 **Tool Output:**
+
 ```typescript
 {
   performance: {
@@ -106,15 +109,15 @@ Evaluate player performance in teamfights.
 **File:** `apps/aws/src/agents/action-groups/combat-tools.ts`
 
 ```typescript
-import { BedrockAgentFunctionResolver } from '@aws-lambda-powertools/event-handler/bedrock-agent';
-import { Logger } from '@aws-lambda-powertools/logger';
-import { Tracer } from '@aws-lambda-powertools/tracer';
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, GetCommand } from '@aws-sdk/lib-dynamodb';
-import type { Context } from 'aws-lambda';
+import { BedrockAgentFunctionResolver } from "@aws-lambda-powertools/event-handler/bedrock-agent";
+import { Logger } from "@aws-lambda-powertools/logger";
+import { Tracer } from "@aws-lambda-powertools/tracer";
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { DynamoDBDocumentClient, GetCommand } from "@aws-sdk/lib-dynamodb";
+import type { Context } from "aws-lambda";
 
-const logger = new Logger({ serviceName: 'hexcore-combat-tools' });
-const tracer = new Tracer({ serviceName: 'hexcore-combat-tools' });
+const logger = new Logger({ serviceName: "hexcore-combat-tools" });
+const tracer = new Tracer({ serviceName: "hexcore-combat-tools" });
 const app = new BedrockAgentFunctionResolver({ logger });
 
 const ddbClient = new DynamoDBClient({});
@@ -123,7 +126,7 @@ const ddb = DynamoDBDocumentClient.from(ddbClient);
 // Tool: Get Match Combat Data
 app.tool<{ matchId: string; puuid: string }>(
   async ({ matchId, puuid }, { event }) => {
-    logger.info('Fetching combat data', { matchId, puuid });
+    logger.info("Fetching combat data", { matchId, puuid });
 
     try {
       const result = await ddb.send(
@@ -135,7 +138,7 @@ app.tool<{ matchId: string; puuid: string }>(
 
       if (!result.Item) {
         return {
-          error: 'Match data not found',
+          error: "Match data not found",
           matchId,
           puuid,
         };
@@ -153,27 +156,32 @@ app.tool<{ matchId: string; puuid: string }>(
         damageReceived: combatData?.damageReceived || {},
       };
     } catch (error) {
-      logger.error('Error fetching combat data', { error });
+      logger.error("Error fetching combat data", { error });
       throw error;
     }
   },
   {
-    name: 'getMatchCombatData',
-    description: 'Retrieve combat statistics for a specific match',
+    name: "getMatchCombatData",
+    description: "Retrieve combat statistics for a specific match",
   }
 );
 
 // Tool: Analyze Damage Output
 app.tool<{
   damageDealt: { physical: number; magic: number; true: number; total: number };
-  damageReceived: { physical: number; magic: number; true: number; total: number };
+  damageReceived: {
+    physical: number;
+    magic: number;
+    true: number;
+    total: number;
+  };
 }>(
   async ({ damageDealt, damageReceived }, { event }) => {
-    logger.info('Analyzing damage output');
+    logger.info("Analyzing damage output");
 
     try {
       const damageRatio = damageDealt.total / (damageReceived.total || 1);
-      
+
       const damageBreakdown = {
         physical: ((damageDealt.physical / damageDealt.total) * 100).toFixed(1),
         magic: ((damageDealt.magic / damageDealt.total) * 100).toFixed(1),
@@ -182,7 +190,12 @@ app.tool<{
 
       const survivability = {
         damageRatio: damageRatio.toFixed(2),
-        rating: damageRatio > 1.5 ? 'Excellent' : damageRatio > 1.0 ? 'Good' : 'Needs Improvement',
+        rating:
+          damageRatio > 1.5
+            ? "Excellent"
+            : damageRatio > 1.0
+            ? "Good"
+            : "Needs Improvement",
       };
 
       return {
@@ -190,16 +203,19 @@ app.tool<{
         totalDamageReceived: damageReceived.total,
         damageBreakdown,
         survivability,
-        recommendations: generateDamageRecommendations(damageDealt, damageReceived),
+        recommendations: generateDamageRecommendations(
+          damageDealt,
+          damageReceived
+        ),
       };
     } catch (error) {
-      logger.error('Error analyzing damage output', { error });
+      logger.error("Error analyzing damage output", { error });
       throw error;
     }
   },
   {
-    name: 'analyzeDamageOutput',
-    description: 'Analyze damage patterns and combat effectiveness',
+    name: "analyzeDamageOutput",
+    description: "Analyze damage patterns and combat effectiveness",
   }
 );
 
@@ -209,11 +225,14 @@ app.tool<{
   killParticipation: number;
 }>(
   async ({ kda, killParticipation }, { event }) => {
-    logger.info('Evaluating teamfight performance');
+    logger.info("Evaluating teamfight performance");
 
     try {
-      const kdaRatio = ((kda.kills + kda.assists) / Math.max(kda.deaths, 1)).toFixed(2);
-      
+      const kdaRatio = (
+        (kda.kills + kda.assists) /
+        Math.max(kda.deaths, 1)
+      ).toFixed(2);
+
       const performance = {
         kdaRatio: parseFloat(kdaRatio),
         killParticipation: killParticipation.toFixed(1),
@@ -224,15 +243,17 @@ app.tool<{
       const improvements = [];
 
       if (killParticipation >= 70) {
-        strengths.push('High kill participation - excellent team presence');
+        strengths.push("High kill participation - excellent team presence");
       } else if (killParticipation < 50) {
-        improvements.push('Increase involvement in team kills');
+        improvements.push("Increase involvement in team kills");
       }
 
       if (parseFloat(kdaRatio) >= 3.0) {
-        strengths.push('Excellent KDA ratio - strong combat effectiveness');
+        strengths.push("Excellent KDA ratio - strong combat effectiveness");
       } else if (parseFloat(kdaRatio) < 2.0) {
-        improvements.push('Focus on reducing deaths and improving survivability');
+        improvements.push(
+          "Focus on reducing deaths and improving survivability"
+        );
       }
 
       return {
@@ -241,40 +262,52 @@ app.tool<{
         improvements,
       };
     } catch (error) {
-      logger.error('Error evaluating teamfight performance', { error });
+      logger.error("Error evaluating teamfight performance", { error });
       throw error;
     }
   },
   {
-    name: 'evaluateTeamfightPerformance',
-    description: 'Evaluate player performance in teamfights',
+    name: "evaluateTeamfightPerformance",
+    description: "Evaluate player performance in teamfights",
   }
 );
 
 function generateDamageRecommendations(
   damageDealt: { physical: number; magic: number; true: number; total: number },
-  damageReceived: { physical: number; magic: number; true: number; total: number }
+  damageReceived: {
+    physical: number;
+    magic: number;
+    true: number;
+    total: number;
+  }
 ): string[] {
   const recommendations: string[] = [];
-  
+
   const damageRatio = damageDealt.total / (damageReceived.total || 1);
-  
+
   if (damageRatio < 1.0) {
-    recommendations.push('Focus on improving positioning to increase damage output while reducing damage taken');
+    recommendations.push(
+      "Focus on improving positioning to increase damage output while reducing damage taken"
+    );
   }
-  
+
   if (damageReceived.total > damageDealt.total * 1.5) {
-    recommendations.push('Consider building defensive items earlier to improve survivability');
+    recommendations.push(
+      "Consider building defensive items earlier to improve survivability"
+    );
   }
 
   return recommendations;
 }
 
-function getPerformanceRating(kdaRatio: number, killParticipation: number): string {
-  if (kdaRatio >= 3.0 && killParticipation >= 70) return 'S-Tier';
-  if (kdaRatio >= 2.5 && killParticipation >= 60) return 'A-Tier';
-  if (kdaRatio >= 2.0 && killParticipation >= 50) return 'B-Tier';
-  return 'C-Tier';
+function getPerformanceRating(
+  kdaRatio: number,
+  killParticipation: number
+): string {
+  if (kdaRatio >= 3.0 && killParticipation >= 70) return "S-Tier";
+  if (kdaRatio >= 2.5 && killParticipation >= 60) return "A-Tier";
+  if (kdaRatio >= 2.0 && killParticipation >= 50) return "B-Tier";
+  return "C-Tier";
 }
 
 export const handler = async (event: unknown, context: Context) =>
@@ -314,19 +347,20 @@ export const handler = async (event: unknown, context: Context) =>
 
 ### Validation Checklist
 
-- [ ] All 3 tools respond correctly
-- [ ] DynamoDB queries work
-- [ ] Damage calculations accurate
-- [ ] KDA ratio computed correctly
-- [ ] Performance ratings assigned properly
-- [ ] Logging includes all parameters
-- [ ] Error handling works for missing data
+- [x] All 3 tools respond correctly
+- [x] DynamoDB queries work
+- [x] Damage calculations accurate
+- [x] KDA ratio computed correctly
+- [x] Performance ratings assigned properly
+- [x] Logging includes all parameters
+- [x] Error handling works for missing data
 
 ---
 
 ## Next Steps
 
 After completing this task:
+
 1. Proceed to [Task 7.11: Vision Action Groups](./task-711-vision-action-groups.md)
 2. Continue with remaining action group implementations
 

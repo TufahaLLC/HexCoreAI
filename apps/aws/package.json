@@ -5,7 +5,7 @@
   "scripts": {
     "prebuild": "pnpm run clean",
     "build": "tsc",
-    "clean": "rm -rf dist",
+    "clean": "rimraf dist",
     "watch": "tsc --watch",
     "deploy": "pnpm run build && sam deploy",
     "local": "sam local start-api"
@@ -32,6 +32,7 @@
   "devDependencies": {
     "@types/aws-lambda": "^8.10.153",
     "@types/node": "^24.6.2",
+    "rimraf": "^5.0.5",
     "typescript": "^5.9.3"
   }
 }

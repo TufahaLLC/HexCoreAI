@@ -1,6 +1,6 @@
 # Task 7.9: Create Enhanced Bedrock Client
 
-**Status**: 🔄 Pending
+**Status**: ✅ Completed
 
 ## Overview
 
@@ -25,6 +25,7 @@ When `enableTrace: true` is set in the InvokeAgentCommand, Bedrock Agents emit d
 ### Why This Matters
 
 Instead of just showing "Agent is thinking...", we can now show:
+
 - "🔍 Retrieving build data from match history..." (when tool starts)
 - "✓ Build data retrieved successfully" (when tool completes)
 - Agent reasoning: "I need to analyze the efficiency next..."
@@ -35,6 +36,7 @@ This creates a **transparent, engaging user experience** where users see exactly
 ### Cost Optimization
 
 Enhanced trace events increase token usage and API costs by ~20-30%. To optimize:
+
 - **Testing environment**: Traces disabled (`enableTrace: false`) for cost-effective testing
 - **Production environment**: Traces enabled (`enableTrace: true`) for better user experience
 - Trace verbosity is configurable via `ENABLE_BEDROCK_TRACES` environment variable
@@ -45,38 +47,38 @@ Enhanced trace events increase token usage and API costs by ~20-30%. To optimize
 
 ### 7.15.1: Create bedrock-client.ts File
 
-- [ ] Create `apps/aws/src/shared/bedrock-client.ts`
-- [ ] Import BedrockAgentRuntimeClient
-- [ ] Define TypeScript interfaces for parameters and handlers
+- [x] Create `apps/aws/src/shared/bedrock-client.ts`
+- [x] Import BedrockAgentRuntimeClient
+- [x] Define TypeScript interfaces for parameters and handlers
 
 ### 7.15.2: Define Trace Handler Interfaces
 
-- [ ] Define `InvokeAgentParams` interface
-- [ ] Define `TraceHandlers` interface with all callback types
-- [ ] Define `StreamingAgentParams` interface
+- [x] Define `InvokeAgentParams` interface
+- [x] Define `TraceHandlers` interface with all callback types
+- [x] Define `StreamingAgentParams` interface
 
 ### 7.15.3: Implement invokeBedrockAgentWithTracing Function
 
-- [ ] Create main invocation function
-- [ ] Configure InvokeAgentCommand with trace enablement
-- [ ] Process streaming response chunks
-- [ ] Handle all trace event types
-- [ ] Return full response text
+- [x] Create main invocation function
+- [x] Configure InvokeAgentCommand with trace enablement
+- [x] Process streaming response chunks
+- [x] Handle all trace event types
+- [x] Return full response text
 
 ### 7.15.4: Implement processTraceEvent Helper
 
-- [ ] Handle PreProcessingTrace events
-- [ ] Handle OrchestrationTrace events (rationale, invocationInput, observation)
-- [ ] Handle PostProcessingTrace events
-- [ ] Handle FailureTrace events
-- [ ] Call appropriate handler callbacks
+- [x] Handle PreProcessingTrace events
+- [x] Handle OrchestrationTrace events (rationale, invocationInput, observation)
+- [x] Handle PostProcessingTrace events
+- [x] Handle FailureTrace events
+- [x] Call appropriate handler callbacks
 
 ### 7.15.5: Add Error Handling and Logging
 
-- [ ] Add try-catch blocks
-- [ ] Log invocation start/completion
-- [ ] Log trace event processing
-- [ ] Handle stream errors gracefully
+- [x] Add try-catch blocks
+- [x] Log invocation start/completion
+- [x] Log trace event processing
+- [x] Handle stream errors gracefully
 
 ---
 
@@ -85,11 +87,11 @@ Enhanced trace events increase token usage and API costs by ~20-30%. To optimize
 **File:** `apps/aws/src/shared/bedrock-client.ts`
 
 ```typescript
-import { 
-  BedrockAgentRuntimeClient, 
+import {
+  BedrockAgentRuntimeClient,
   InvokeAgentCommand,
-} from '@aws-sdk/client-bedrock-agent-runtime';
-import { Logger } from '@aws-lambda-powertools/logger';
+} from "@aws-sdk/client-bedrock-agent-runtime";
+import { Logger } from "@aws-lambda-powertools/logger";
 
 interface InvokeAgentParams {
   agentId: string;
@@ -100,10 +102,16 @@ interface InvokeAgentParams {
 
 interface TraceHandlers {
   onChunk: (chunk: string) => void;
-  onToolInvocationStart?: (toolName: string, parameters: Record<string, any>) => void;
+  onToolInvocationStart?: (
+    toolName: string,
+    parameters: Record<string, any>
+  ) => void;
   onToolInvocationComplete?: (toolName: string, result: string) => void;
   onRationale?: (reasoning: string) => void;
-  onPreProcessing?: (validation: { isValid: boolean; rationale: string }) => void;
+  onPreProcessing?: (validation: {
+    isValid: boolean;
+    rationale: string;
+  }) => void;
   onPostProcessing?: (finalText: string) => void;
   onError?: (error: string) => void;
 }
@@ -112,15 +120,15 @@ interface StreamingAgentParams extends InvokeAgentParams {
   handlers: TraceHandlers;
 }
 
-const bedrockClient = new BedrockAgentRuntimeClient({ 
-  region: process.env.AWS_REGION || 'us-east-1' 
+const bedrockClient = new BedrockAgentRuntimeClient({
+  region: process.env.AWS_REGION || "us-east-1",
 });
-const logger = new Logger({ serviceName: 'BedrockClient' });
+const logger = new Logger({ serviceName: "BedrockClient" });
 
 // Cost optimization: Make trace events configurable
 // Testing environment: ENABLE_BEDROCK_TRACES=false (saves costs)
 // Production environment: ENABLE_BEDROCK_TRACES=true (better UX)
-const ENABLE_TRACES = process.env.ENABLE_BEDROCK_TRACES === 'true';
+const ENABLE_TRACES = process.env.ENABLE_BEDROCK_TRACES === "true";
 
 /**
  * Invoke Bedrock agent with configurable streaming and trace event handling
@@ -129,10 +137,10 @@ const ENABLE_TRACES = process.env.ENABLE_BEDROCK_TRACES === 'true';
 export async function invokeBedrockAgentWithTracing(
   params: StreamingAgentParams
 ): Promise<string> {
-  logger.info('Invoking Bedrock agent', { 
-    agentId: params.agentId, 
+  logger.info("Invoking Bedrock agent", {
+    agentId: params.agentId,
     sessionId: params.sessionId,
-    tracesEnabled: ENABLE_TRACES
+    tracesEnabled: ENABLE_TRACES,
   });
 
   const command = new InvokeAgentCommand({
@@ -143,21 +151,21 @@ export async function invokeBedrockAgentWithTracing(
     enableTrace: ENABLE_TRACES, // Configurable based on environment
   });
 
-  let fullResponse = '';
+  let fullResponse = "";
   let toolCallCount = 0;
 
   try {
     const response = await bedrockClient.send(command);
 
     if (!response.completion) {
-      throw new Error('Completion is undefined');
+      throw new Error("Completion is undefined");
     }
 
     // Process each event in the stream
     for await (const event of response.completion) {
       // Handle text chunks
       if (event.chunk?.bytes) {
-        const chunk = new TextDecoder('utf-8').decode(event.chunk.bytes);
+        const chunk = new TextDecoder("utf-8").decode(event.chunk.bytes);
         fullResponse += chunk;
         params.handlers.onChunk(chunk);
       }
@@ -168,17 +176,19 @@ export async function invokeBedrockAgentWithTracing(
       }
     }
 
-    logger.info('Agent streaming complete', { 
+    logger.info("Agent streaming complete", {
       sessionId: params.sessionId,
       responseLength: fullResponse.length,
-      toolCalls: toolCallCount
+      toolCalls: toolCallCount,
     });
 
     return fullResponse;
   } catch (error) {
-    logger.error('Error streaming from Bedrock agent:', error);
+    logger.error("Error streaming from Bedrock agent:", error);
     if (params.handlers.onError) {
-      params.handlers.onError(error instanceof Error ? error.message : 'Unknown error');
+      params.handlers.onError(
+        error instanceof Error ? error.message : "Unknown error"
+      );
     }
     throw error;
   }
@@ -195,11 +205,12 @@ async function processTraceEvent(
 ): Promise<void> {
   // PreProcessing Trace: Input validation
   if (trace.preProcessingTrace) {
-    const parsed = trace.preProcessingTrace.modelInvocationOutput?.parsedResponse;
+    const parsed =
+      trace.preProcessingTrace.modelInvocationOutput?.parsedResponse;
     if (parsed && handlers.onPreProcessing) {
       handlers.onPreProcessing({
         isValid: parsed.isValid,
-        rationale: parsed.rationale || '',
+        rationale: parsed.rationale || "",
       });
     }
   }
@@ -216,11 +227,11 @@ async function processTraceEvent(
     // InvocationInput: Tool being called
     if (orch.invocationInput && handlers.onToolInvocationStart) {
       const input = orch.invocationInput;
-      
+
       if (input.actionGroupInvocationInput) {
         const actionInput = input.actionGroupInvocationInput;
-        const toolName = actionInput.function || 'unknown';
-        
+        const toolName = actionInput.function || "unknown";
+
         // Build parameters object
         const parameters: Record<string, any> = {};
         if (actionInput.parameters) {
@@ -237,12 +248,12 @@ async function processTraceEvent(
     // Observation: Tool result
     if (orch.observation && handlers.onToolInvocationComplete) {
       const obs = orch.observation;
-      
+
       if (obs.actionGroupInvocationOutput) {
         const output = obs.actionGroupInvocationOutput;
-        const toolName = output.function || 'unknown';
+        const toolName = output.function || "unknown";
         const result = output.text || JSON.stringify(output);
-        
+
         handlers.onToolInvocationComplete(toolName, result);
       }
     }
@@ -250,7 +261,8 @@ async function processTraceEvent(
 
   // PostProcessing Trace: Final response
   if (trace.postProcessingTrace && handlers.onPostProcessing) {
-    const parsed = trace.postProcessingTrace.modelInvocationOutput?.parsedResponse;
+    const parsed =
+      trace.postProcessingTrace.modelInvocationOutput?.parsedResponse;
     if (parsed?.text) {
       handlers.onPostProcessing(parsed.text);
     }
@@ -317,39 +329,45 @@ User Request
 
 ```typescript
 // Test trace event handling
-import { invokeBedrockAgentWithTracing } from './bedrock-client';
+import { invokeBedrockAgentWithTracing } from "./bedrock-client";
 
 const response = await invokeBedrockAgentWithTracing({
-  agentId: 'TEST_AGENT_ID',
-  agentAliasId: 'TEST_ALIAS_ID',
-  sessionId: 'test-session-123',
-  inputText: 'Analyze match data',
+  agentId: "TEST_AGENT_ID",
+  agentAliasId: "TEST_ALIAS_ID",
+  sessionId: "test-session-123",
+  inputText: "Analyze match data",
   handlers: {
-    onChunk: (chunk) => logger.info('Received chunk', { chunkLength: chunk.length }),
-    onRationale: (reasoning) => logger.info('Agent reasoning received', { reasoning }),
-    onToolInvocationStart: (tool, params) => 
+    onChunk: (chunk) =>
+      logger.info("Received chunk", { chunkLength: chunk.length }),
+    onRationale: (reasoning) =>
+      logger.info("Agent reasoning received", { reasoning }),
+    onToolInvocationStart: (tool, params) =>
       logger.info(`Tool invocation started`, { tool, params }),
-    onToolInvocationComplete: (tool, result) => 
-      logger.info(`Tool invocation completed`, { tool, resultLength: result.length }),
-  }
+    onToolInvocationComplete: (tool, result) =>
+      logger.info(`Tool invocation completed`, {
+        tool,
+        resultLength: result.length,
+      }),
+  },
 });
 ```
 
 ### Validation Checklist
 
-- [ ] Client initializes correctly
-- [ ] Trace events toggle with ENABLE_BEDROCK_TRACES
-- [ ] All handler callbacks execute
-- [ ] Text chunks stream properly
-- [ ] Tool invocations tracked
-- [ ] Errors handled gracefully
-- [ ] Full response returned
+- [x] Client initializes correctly
+- [x] Trace events toggle with ENABLE_BEDROCK_TRACES
+- [x] All handler callbacks execute
+- [x] Text chunks stream properly
+- [x] Tool invocations tracked
+- [x] Errors handled gracefully
+- [x] Full response returned
 
 ---
 
 ## Next Steps
 
 After completing this task:
+
 1. Use this client in [Task 7.16: Agent Orchestrators](./task-716-agent-orchestrators.md)
 2. Implement all 6 orchestrator functions with trace handlers
 

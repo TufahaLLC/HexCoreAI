@@ -1,4 +1,4 @@
-AWSTemplateFormatVersion: '2010-09-09'
+AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
 Description: HexCore AI Event-Driven Serverless Architecture
 
@@ -18,8 +18,10 @@ Globals:
         CONNECTIONS_TABLE: !Ref ConnectionsTable
         MATCH_DATA_TABLE: !Ref MatchDataTable
         MATCH_QUEUE_URL: !Ref MatchQueue
-        WEBSOCKET_ENDPOINT: !Sub 'https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}'
+        WEBSOCKET_ENDPOINT: !Sub "https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}"
         IDEMPOTENCY_TABLE: !Ref IdempotencyTable
+        ANALYSIS_RESULTS_TABLE: !Ref AnalysisResultsTable
+        RESULTS_BUCKET: !Ref ResultsBucket
         POWERTOOLS_SERVICE_NAME: hexcore-ai
         POWERTOOLS_METRICS_NAMESPACE: HexCoreAI
         AWS_LAMBDA_LOG_LEVEL: info
@@ -31,9 +33,20 @@ Parameters:
     Type: String
     Default: test
     Description: API Gateway stage name
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues:
+      - test
+      - prod
+    Description: Environment for trace enablement (prod=enabled, test=disabled for cost savings)
   RiotApiKeySecretName:
     Type: String
     Description: Name of Secrets Manager secret containing Riot API key
+
+# ==================== Conditions ====================
+Conditions:
+  IsProduction: !Equals [!Ref Environment, prod]
 
 # ==================== Resources ====================
 Resources:
@@ -119,6 +132,39 @@ Resources:
       TimeToLiveSpecification:
         AttributeName: expiresAt
         Enabled: true
+
+  AgentSessionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: HexCore-AgentSessions
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: sessionId
+          AttributeType: S
+        - AttributeName: matchId
+          AttributeType: S
+        - AttributeName: createdAt
+          AttributeType: N
+      KeySchema:
+        - AttributeName: sessionId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: MatchIndex
+          KeySchema:
+            - AttributeName: matchId
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+      Tags:
+        - Key: Project
+          Value: HexCoreAI
+        - Key: Phase
+          Value: Phase7
 
   # ==================== SQS Queues ====================
   MatchQueue:
@@ -221,6 +267,10 @@ Resources:
             TableName: !Ref ConnectionsTable
         - DynamoDBCrudPolicy:
             TableName: !Ref IdempotencyTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref AnalysisResultsTable
+        - S3ReadPolicy:
+            BucketName: !Ref ResultsBucket
         - SQSSendMessagePolicy:
             QueueName: !GetAtt MatchQueue.QueueName
         - Statement:
@@ -302,13 +352,588 @@ Resources:
                 - secretsmanager:GetSecretValue
               Resource: !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${RiotApiKeySecretName}*
 
-  # ==================== Synthesizer Lambda Function ====================
-  # NOTE: Synthesizer function will be added in Task 8.1 (Phase 8)
-  # This function aggregates all agent results and sends final analysis
+  # ==================== Bedrock Agent IAM Roles ====================
+  BedrockAgentServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: HexCore-BedrockAgent-ServiceRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: bedrock.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/CloudWatchLogsFullAccess
+      Policies:
+        - PolicyName: BedrockModelAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                Resource: !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/*"
+        - PolicyName: LambdaInvokeAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource:
+                  - !GetAtt BuildAgentActionGroupFunction.Arn
+                  - !GetAtt CombatAgentActionGroupFunction.Arn
+                  - !GetAtt VisionAgentActionGroupFunction.Arn
+                  - !GetAtt EconomyAgentActionGroupFunction.Arn
+                  - !GetAtt ChampionAgentActionGroupFunction.Arn
+                  - !GetAtt CompetitiveAgentActionGroupFunction.Arn
+
+  # ==================== Action Group Lambda Functions ====================
+  BuildAgentActionGroupFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: HexCore-BuildAgent-ActionGroup
+      Handler: agents/action-groups/build-tools.handler
+      CodeUri: ./dist
+      Timeout: 60
+      MemorySize: 512
+      Environment:
+        Variables:
+          POWERTOOLS_SERVICE_NAME: hexcore-build-tools
+          LOG_LEVEL: INFO
+          MATCH_DATA_TABLE: !Ref MatchDataTable
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref MatchDataTable
+
+  CombatAgentActionGroupFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: HexCore-CombatAgent-ActionGroup
+      Handler: agents/action-groups/combat-tools.handler
+      CodeUri: ./dist
+      Timeout: 60
+      MemorySize: 512
+      Environment:
+        Variables:
+          POWERTOOLS_SERVICE_NAME: hexcore-combat-tools
+          LOG_LEVEL: INFO
+          MATCH_DATA_TABLE: !Ref MatchDataTable
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref MatchDataTable
+
+  VisionAgentActionGroupFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: HexCore-VisionAgent-ActionGroup
+      Handler: agents/action-groups/vision-tools.handler
+      CodeUri: ./dist
+      Timeout: 60
+      MemorySize: 512
+      Environment:
+        Variables:
+          POWERTOOLS_SERVICE_NAME: hexcore-vision-tools
+          LOG_LEVEL: INFO
+          MATCH_DATA_TABLE: !Ref MatchDataTable
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref MatchDataTable
+
+  EconomyAgentActionGroupFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: HexCore-EconomyAgent-ActionGroup
+      Handler: agents/action-groups/economy-tools.handler
+      CodeUri: ./dist
+      Timeout: 60
+      MemorySize: 512
+      Environment:
+        Variables:
+          POWERTOOLS_SERVICE_NAME: hexcore-economy-tools
+          LOG_LEVEL: INFO
+          MATCH_DATA_TABLE: !Ref MatchDataTable
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref MatchDataTable
+
+  ChampionAgentActionGroupFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: HexCore-ChampionAgent-ActionGroup
+      Handler: agents/action-groups/champion-tools.handler
+      CodeUri: ./dist
+      Timeout: 60
+      MemorySize: 512
+      Environment:
+        Variables:
+          POWERTOOLS_SERVICE_NAME: hexcore-champion-tools
+          LOG_LEVEL: INFO
+          MATCH_DATA_TABLE: !Ref MatchDataTable
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref MatchDataTable
+
+  CompetitiveAgentActionGroupFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: HexCore-CompetitiveAgent-ActionGroup
+      Handler: agents/action-groups/competitive-tools.handler
+      CodeUri: ./dist
+      Timeout: 60
+      MemorySize: 512
+      Environment:
+        Variables:
+          POWERTOOLS_SERVICE_NAME: hexcore-competitive-tools
+          LOG_LEVEL: INFO
+          MATCH_DATA_TABLE: !Ref MatchDataTable
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref MatchDataTable
+
+  # ==================== Lambda Permissions for Bedrock ====================
+  BuildAgentActionGroupPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref BuildAgentActionGroupFunction
+      Action: lambda:InvokeFunction
+      Principal: bedrock.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+
+  CombatAgentActionGroupPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref CombatAgentActionGroupFunction
+      Action: lambda:InvokeFunction
+      Principal: bedrock.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+
+  VisionAgentActionGroupPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref VisionAgentActionGroupFunction
+      Action: lambda:InvokeFunction
+      Principal: bedrock.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+
+  EconomyAgentActionGroupPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref EconomyAgentActionGroupFunction
+      Action: lambda:InvokeFunction
+      Principal: bedrock.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+
+  ChampionAgentActionGroupPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ChampionAgentActionGroupFunction
+      Action: lambda:InvokeFunction
+      Principal: bedrock.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+
+  CompetitiveAgentActionGroupPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref CompetitiveAgentActionGroupFunction
+      Action: lambda:InvokeFunction
+      Principal: bedrock.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+
+  # ==================== Bedrock Agents ====================
+  BuildAnalysisAgent:
+    Type: AWS::Bedrock::Agent
+    Properties:
+      AgentName: HexCore-BuildAnalysisAgent
+      AgentResourceRoleArn: !GetAtt BedrockAgentServiceRole.Arn
+      FoundationModel: anthropic.claude-3-5-sonnet-20241022-v2:0
+      Instruction: |
+        You are an expert League of Legends build optimization analyst. Analyze itemization 
+        patterns, build paths, and adaptation strategies. Provide actionable recommendations 
+        for improving item efficiency, power spike timing, and situational adaptation. 
+        Consider champion-specific builds, enemy team composition, and game state when 
+        making recommendations.
+      AutoPrepare: true
+
+  BuildAnalysisAgentProdAlias:
+    Type: AWS::Bedrock::AgentAlias
+    Properties:
+      AgentId: !GetAtt BuildAnalysisAgent.AgentId
+      AgentAliasName: prod
+      Description: Production alias for Build Analysis Agent
+
+  BuildAnalysisAgentTestAlias:
+    Type: AWS::Bedrock::AgentAlias
+    Properties:
+      AgentId: !GetAtt BuildAnalysisAgent.AgentId
+      AgentAliasName: test
+      Description: Testing alias for Build Analysis Agent
+
+  CombatAnalysisAgent:
+    Type: AWS::Bedrock::Agent
+    Properties:
+      AgentName: HexCore-CombatAnalysisAgent
+      AgentResourceRoleArn: !GetAtt BedrockAgentServiceRole.Arn
+      FoundationModel: anthropic.claude-3-5-sonnet-20241022-v2:0
+      Instruction: |
+        You are an expert League of Legends combat performance analyst. Analyze teamfight 
+        effectiveness, damage output, survivability, and engagement patterns. Provide 
+        insights on combat timing, target selection, and positioning. Help players 
+        understand their combat strengths and areas for improvement.
+      AutoPrepare: true
+
+  CombatAnalysisAgentProdAlias:
+    Type: AWS::Bedrock::AgentAlias
+    Properties:
+      AgentId: !GetAtt CombatAnalysisAgent.AgentId
+      AgentAliasName: prod
+      Description: Production alias for Combat Analysis Agent
+
+  CombatAnalysisAgentTestAlias:
+    Type: AWS::Bedrock::AgentAlias
+    Properties:
+      AgentId: !GetAtt CombatAnalysisAgent.AgentId
+      AgentAliasName: test
+      Description: Testing alias for Combat Analysis Agent
+
+  VisionAnalysisAgent:
+    Type: AWS::Bedrock::Agent
+    Properties:
+      AgentName: HexCore-VisionAnalysisAgent
+      AgentResourceRoleArn: !GetAtt BedrockAgentServiceRole.Arn
+      FoundationModel: anthropic.claude-3-5-sonnet-20241022-v2:0
+      Instruction: |
+        You are an expert League of Legends vision control analyst. Analyze ward placement 
+        patterns, vision denial, and map awareness. Provide recommendations for improving 
+        vision coverage, objective control preparation, and enemy vision denial. Consider 
+        game state, role requirements, and strategic importance of vision locations.
+      AutoPrepare: true
+
+  VisionAnalysisAgentProdAlias:
+    Type: AWS::Bedrock::AgentAlias
+    Properties:
+      AgentId: !GetAtt VisionAnalysisAgent.AgentId
+      AgentAliasName: prod
+      Description: Production alias for Vision Analysis Agent
+
+  VisionAnalysisAgentTestAlias:
+    Type: AWS::Bedrock::AgentAlias
+    Properties:
+      AgentId: !GetAtt VisionAnalysisAgent.AgentId
+      AgentAliasName: test
+      Description: Testing alias for Vision Analysis Agent
+
+  EconomyAnalysisAgent:
+    Type: AWS::Bedrock::Agent
+    Properties:
+      AgentName: HexCore-EconomyAnalysisAgent
+      AgentResourceRoleArn: !GetAtt BedrockAgentServiceRole.Arn
+      FoundationModel: anthropic.claude-3-5-sonnet-20241022-v2:0
+      Instruction: |
+        You are an expert League of Legends economy and resource management analyst. Analyze 
+        gold generation, farming efficiency, and resource allocation. Provide insights on 
+        CS improvement opportunities, gold optimization, and economic scaling. Help players 
+        maximize their economic impact relative to their role.
+      AutoPrepare: true
+
+  EconomyAnalysisAgentProdAlias:
+    Type: AWS::Bedrock::AgentAlias
+    Properties:
+      AgentId: !GetAtt EconomyAnalysisAgent.AgentId
+      AgentAliasName: prod
+      Description: Production alias for Economy Analysis Agent
+
+  EconomyAnalysisAgentTestAlias:
+    Type: AWS::Bedrock::AgentAlias
+    Properties:
+      AgentId: !GetAtt EconomyAnalysisAgent.AgentId
+      AgentAliasName: test
+      Description: Testing alias for Economy Analysis Agent
+
+  ChampionAnalysisAgent:
+    Type: AWS::Bedrock::Agent
+    Properties:
+      AgentName: HexCore-ChampionAnalysisAgent
+      AgentResourceRoleArn: !GetAtt BedrockAgentServiceRole.Arn
+      FoundationModel: anthropic.claude-3-5-sonnet-20241022-v2:0
+      Instruction: |
+        You are an expert League of Legends champion performance analyst. Analyze champion-
+        specific performance, mastery progression, and pool optimization. Provide insights 
+        on champion strengths, weaknesses, and learning curves. Help players understand 
+        which champions align with their playstyle and skill level.
+      AutoPrepare: true
+
+  ChampionAnalysisAgentProdAlias:
+    Type: AWS::Bedrock::AgentAlias
+    Properties:
+      AgentId: !GetAtt ChampionAnalysisAgent.AgentId
+      AgentAliasName: prod
+      Description: Production alias for Champion Analysis Agent
+
+  ChampionAnalysisAgentTestAlias:
+    Type: AWS::Bedrock::AgentAlias
+    Properties:
+      AgentId: !GetAtt ChampionAnalysisAgent.AgentId
+      AgentAliasName: test
+      Description: Testing alias for Champion Analysis Agent
+
+  CompetitiveAnalysisAgent:
+    Type: AWS::Bedrock::Agent
+    Properties:
+      AgentName: HexCore-CompetitiveAnalysisAgent
+      AgentResourceRoleArn: !GetAtt BedrockAgentServiceRole.Arn
+      FoundationModel: anthropic.claude-3-5-sonnet-20241022-v2:0
+      Instruction: |
+        You are an expert League of Legends competitive progression analyst. Analyze ranked 
+        performance, climb efficiency, and skill development. Provide insights on rank-
+        appropriate strategies, performance consistency, and areas for improvement. Help 
+        players understand their competitive trajectory and readiness for higher ranks.
+      AutoPrepare: true
+
+  CompetitiveAnalysisAgentProdAlias:
+    Type: AWS::Bedrock::AgentAlias
+    Properties:
+      AgentId: !GetAtt CompetitiveAnalysisAgent.AgentId
+      AgentAliasName: prod
+      Description: Production alias for Competitive Analysis Agent
+
+  CompetitiveAnalysisAgentTestAlias:
+    Type: AWS::Bedrock::AgentAlias
+    Properties:
+      AgentId: !GetAtt CompetitiveAnalysisAgent.AgentId
+      AgentAliasName: test
+      Description: Testing alias for Competitive Analysis Agent
 
   # ==================== Agent Orchestrator Lambda Functions ====================
-  # NOTE: Orchestrator functions will be added in Task 7.2.6
-  # These functions invoke Bedrock Agents and manage agent sessions
+  BuildAgentOrchestratorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: HexCore-BuildAgent-Orchestrator
+      Handler: agents/orchestrators/build-agent.handler
+      CodeUri: ./dist
+      Timeout: 120
+      MemorySize: 512
+      Environment:
+        Variables:
+          BEDROCK_AGENT_ID: !GetAtt BuildAnalysisAgent.AgentId
+          BEDROCK_AGENT_ALIAS_ID: !GetAtt BuildAnalysisAgentProdAlias.AgentAliasId
+          ENABLE_BEDROCK_TRACES: !If [IsProduction, "true", "false"]
+          POWERTOOLS_SERVICE_NAME: hexcore-build-orchestrator
+          LOG_LEVEL: INFO
+          AGENT_SESSIONS_TABLE: !Ref AgentSessionsTable
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref MatchDataTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConnectionsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AgentSessionsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - execute-api:ManageConnections
+              Resource: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*"
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeAgent
+              Resource: !GetAtt BuildAnalysisAgent.AgentArn
+
+  CombatAgentOrchestratorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: HexCore-CombatAgent-Orchestrator
+      Handler: agents/orchestrators/combat-agent.handler
+      CodeUri: ./dist
+      Timeout: 120
+      MemorySize: 512
+      Environment:
+        Variables:
+          BEDROCK_AGENT_ID: !GetAtt CombatAnalysisAgent.AgentId
+          BEDROCK_AGENT_ALIAS_ID: !GetAtt CombatAnalysisAgentProdAlias.AgentAliasId
+          ENABLE_BEDROCK_TRACES: !If [IsProduction, "true", "false"]
+          POWERTOOLS_SERVICE_NAME: hexcore-combat-orchestrator
+          LOG_LEVEL: INFO
+          AGENT_SESSIONS_TABLE: !Ref AgentSessionsTable
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref MatchDataTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConnectionsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AgentSessionsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - execute-api:ManageConnections
+              Resource: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*"
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeAgent
+              Resource: !GetAtt CombatAnalysisAgent.AgentArn
+
+  VisionAgentOrchestratorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: HexCore-VisionAgent-Orchestrator
+      Handler: agents/orchestrators/vision-agent.handler
+      CodeUri: ./dist
+      Timeout: 120
+      MemorySize: 512
+      Environment:
+        Variables:
+          BEDROCK_AGENT_ID: !GetAtt VisionAnalysisAgent.AgentId
+          BEDROCK_AGENT_ALIAS_ID: !GetAtt VisionAnalysisAgentProdAlias.AgentAliasId
+          ENABLE_BEDROCK_TRACES: !If [IsProduction, "true", "false"]
+          POWERTOOLS_SERVICE_NAME: hexcore-vision-orchestrator
+          LOG_LEVEL: INFO
+          AGENT_SESSIONS_TABLE: !Ref AgentSessionsTable
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref MatchDataTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConnectionsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AgentSessionsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - execute-api:ManageConnections
+              Resource: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*"
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeAgent
+              Resource: !GetAtt VisionAnalysisAgent.AgentArn
+
+  EconomyAgentOrchestratorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: HexCore-EconomyAgent-Orchestrator
+      Handler: agents/orchestrators/economy-agent.handler
+      CodeUri: ./dist
+      Timeout: 120
+      MemorySize: 512
+      Environment:
+        Variables:
+          BEDROCK_AGENT_ID: !GetAtt EconomyAnalysisAgent.AgentId
+          BEDROCK_AGENT_ALIAS_ID: !GetAtt EconomyAnalysisAgentProdAlias.AgentAliasId
+          ENABLE_BEDROCK_TRACES: !If [IsProduction, "true", "false"]
+          POWERTOOLS_SERVICE_NAME: hexcore-economy-orchestrator
+          LOG_LEVEL: INFO
+          AGENT_SESSIONS_TABLE: !Ref AgentSessionsTable
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref MatchDataTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConnectionsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AgentSessionsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - execute-api:ManageConnections
+              Resource: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*"
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeAgent
+              Resource: !GetAtt EconomyAnalysisAgent.AgentArn
+
+  ChampionAgentOrchestratorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: HexCore-ChampionAgent-Orchestrator
+      Handler: agents/orchestrators/champion-agent.handler
+      CodeUri: ./dist
+      Timeout: 120
+      MemorySize: 512
+      Environment:
+        Variables:
+          BEDROCK_AGENT_ID: !GetAtt ChampionAnalysisAgent.AgentId
+          BEDROCK_AGENT_ALIAS_ID: !GetAtt ChampionAnalysisAgentProdAlias.AgentAliasId
+          ENABLE_BEDROCK_TRACES: !If [IsProduction, "true", "false"]
+          POWERTOOLS_SERVICE_NAME: hexcore-champion-orchestrator
+          LOG_LEVEL: INFO
+          AGENT_SESSIONS_TABLE: !Ref AgentSessionsTable
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref MatchDataTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConnectionsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AgentSessionsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - execute-api:ManageConnections
+              Resource: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*"
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeAgent
+              Resource: !GetAtt ChampionAnalysisAgent.AgentArn
+
+  CompetitiveAgentOrchestratorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: HexCore-CompetitiveAgent-Orchestrator
+      Handler: agents/orchestrators/competitive-agent.handler
+      CodeUri: ./dist
+      Timeout: 120
+      MemorySize: 512
+      Environment:
+        Variables:
+          BEDROCK_AGENT_ID: !GetAtt CompetitiveAnalysisAgent.AgentId
+          BEDROCK_AGENT_ALIAS_ID: !GetAtt CompetitiveAnalysisAgentProdAlias.AgentAliasId
+          ENABLE_BEDROCK_TRACES: !If [IsProduction, "true", "false"]
+          POWERTOOLS_SERVICE_NAME: hexcore-competitive-orchestrator
+          LOG_LEVEL: INFO
+          AGENT_SESSIONS_TABLE: !Ref AgentSessionsTable
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref MatchDataTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConnectionsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AgentSessionsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - execute-api:ManageConnections
+              Resource: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*"
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeAgent
+              Resource: !GetAtt CompetitiveAnalysisAgent.AgentArn
+
+  # ==================== Synthesizer Lambda Function ====================
+  SynthesizerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: HexCore-Synthesizer
+      Handler: aggregation/synthesizer.handler
+      CodeUri: ./dist
+      Timeout: 60
+      MemorySize: 1024
+      Environment:
+        Variables:
+          RESULTS_BUCKET: !Ref ResultsBucket
+          ANALYSIS_RESULTS_TABLE: !Ref AnalysisResultsTable
+          POWERTOOLS_SERVICE_NAME: hexcore-synthesizer
+          LOG_LEVEL: INFO
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AnalysisResultsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConnectionsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref IdempotencyTable
+        - S3CrudPolicy:
+            BucketName: !Ref ResultsBucket
+        - Statement:
+            - Effect: Allow
+              Action:
+                - execute-api:ManageConnections
+              Resource: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*"
 
   # ==================== EventBridge ====================
   MatchFilteredReadyRule:
@@ -331,7 +956,7 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
-        Version: '2012-10-17'
+        Version: "2012-10-17"
         Statement:
           - Effect: Allow
             Principal:
@@ -340,7 +965,7 @@ Resources:
       Policies:
         - PolicyName: InvokeStepFunctions
           PolicyDocument:
-            Version: '2012-10-17'
+            Version: "2012-10-17"
             Statement:
               - Effect: Allow
                 Action:
@@ -354,8 +979,29 @@ Resources:
       Name: HexCore-MultiAgent-Orchestration
       Type: EXPRESS
       DefinitionUri: statemachine/multi-agent-orchestration.asl.json
-      # NOTE: DefinitionSubstitutions will be added in Task 7.2.7
-      # NOTE: Policies will be added in Task 7.2.7
+      DefinitionSubstitutions:
+        BuildAgentFunctionArn: !GetAtt BuildAgentOrchestratorFunction.Arn
+        CombatAgentFunctionArn: !GetAtt CombatAgentOrchestratorFunction.Arn
+        VisionAgentFunctionArn: !GetAtt VisionAgentOrchestratorFunction.Arn
+        EconomyAgentFunctionArn: !GetAtt EconomyAgentOrchestratorFunction.Arn
+        ChampionAgentFunctionArn: !GetAtt ChampionAgentOrchestratorFunction.Arn
+        CompetitiveAgentFunctionArn: !GetAtt CompetitiveAgentOrchestratorFunction.Arn
+        SynthesizerFunctionArn: !GetAtt SynthesizerFunction.Arn
+      Policies:
+        - LambdaInvokePolicy:
+            FunctionName: !Ref BuildAgentOrchestratorFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref CombatAgentOrchestratorFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref VisionAgentOrchestratorFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref EconomyAgentOrchestratorFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref ChampionAgentOrchestratorFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref CompetitiveAgentOrchestratorFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref SynthesizerFunction
       Tracing:
         Enabled: true
       Logging:
@@ -409,23 +1055,110 @@ Outputs:
   WebSocketURL:
     Description: WebSocket API URL
     Value: !Sub wss://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}
-  
+
   ConnectionsTableName:
     Description: Connections DynamoDB table name
     Value: !Ref ConnectionsTable
-  
+
   MatchDataTableName:
     Description: Match Data DynamoDB table name
     Value: !Ref MatchDataTable
-  
+
   MatchQueueUrl:
     Description: Match Queue URL
     Value: !Ref MatchQueue
-  
+
   ResultsBucketName:
     Description: Results S3 bucket name
     Value: !Ref ResultsBucket
-  
+
   IdempotencyTableName:
     Description: Idempotency DynamoDB table name
     Value: !Ref IdempotencyTable
+
+  AgentSessionsTableName:
+    Description: Agent Sessions DynamoDB table name
+    Value: !Ref AgentSessionsTable
+
+  AnalysisResultsTableName:
+    Description: Analysis Results DynamoDB table name
+    Value: !Ref AnalysisResultsTable
+
+  SynthesizerFunctionArn:
+    Description: Synthesizer Lambda Function ARN
+    Value: !GetAtt SynthesizerFunction.Arn
+
+  # Bedrock Agent IDs
+  BuildAnalysisAgentId:
+    Description: Build Analysis Agent ID
+    Value: !GetAtt BuildAnalysisAgent.AgentId
+
+  CombatAnalysisAgentId:
+    Description: Combat Analysis Agent ID
+    Value: !GetAtt CombatAnalysisAgent.AgentId
+
+  VisionAnalysisAgentId:
+    Description: Vision Analysis Agent ID
+    Value: !GetAtt VisionAnalysisAgent.AgentId
+
+  EconomyAnalysisAgentId:
+    Description: Economy Analysis Agent ID
+    Value: !GetAtt EconomyAnalysisAgent.AgentId
+
+  ChampionAnalysisAgentId:
+    Description: Champion Analysis Agent ID
+    Value: !GetAtt ChampionAnalysisAgent.AgentId
+
+  CompetitiveAnalysisAgentId:
+    Description: Competitive Analysis Agent ID
+    Value: !GetAtt CompetitiveAnalysisAgent.AgentId
+
+  # Production Alias IDs
+  BuildAnalysisAgentProdAliasId:
+    Description: Build Analysis Agent Production Alias ID
+    Value: !GetAtt BuildAnalysisAgentProdAlias.AgentAliasId
+
+  CombatAnalysisAgentProdAliasId:
+    Description: Combat Analysis Agent Production Alias ID
+    Value: !GetAtt CombatAnalysisAgentProdAlias.AgentAliasId
+
+  VisionAnalysisAgentProdAliasId:
+    Description: Vision Analysis Agent Production Alias ID
+    Value: !GetAtt VisionAnalysisAgentProdAlias.AgentAliasId
+
+  EconomyAnalysisAgentProdAliasId:
+    Description: Economy Analysis Agent Production Alias ID
+    Value: !GetAtt EconomyAnalysisAgentProdAlias.AgentAliasId
+
+  ChampionAnalysisAgentProdAliasId:
+    Description: Champion Analysis Agent Production Alias ID
+    Value: !GetAtt ChampionAnalysisAgentProdAlias.AgentAliasId
+
+  CompetitiveAnalysisAgentProdAliasId:
+    Description: Competitive Analysis Agent Production Alias ID
+    Value: !GetAtt CompetitiveAnalysisAgentProdAlias.AgentAliasId
+
+  # Testing Alias IDs
+  BuildAnalysisAgentTestAliasId:
+    Description: Build Analysis Agent Testing Alias ID
+    Value: !GetAtt BuildAnalysisAgentTestAlias.AgentAliasId
+
+  CombatAnalysisAgentTestAliasId:
+    Description: Combat Analysis Agent Testing Alias ID
+    Value: !GetAtt CombatAnalysisAgentTestAlias.AgentAliasId
+
+  VisionAnalysisAgentTestAliasId:
+    Description: Vision Analysis Agent Testing Alias ID
+    Value: !GetAtt VisionAnalysisAgentTestAlias.AgentAliasId
+
+  EconomyAnalysisAgentTestAliasId:
+    Description: Economy Analysis Agent Testing Alias ID
+    Value: !GetAtt EconomyAnalysisAgentTestAlias.AgentAliasId
+
+  ChampionAnalysisAgentTestAliasId:
+    Description: Champion Analysis Agent Testing Alias ID
+    Value: !GetAtt ChampionAnalysisAgentTestAlias.AgentAliasId
+
+  CompetitiveAnalysisAgentTestAliasId:
+    Description: Competitive Analysis Agent Testing Alias ID
+    Value: !GetAtt CompetitiveAnalysisAgentTestAlias.AgentAliasId

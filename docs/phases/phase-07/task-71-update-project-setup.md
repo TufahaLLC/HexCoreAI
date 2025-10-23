@@ -1,6 +1,6 @@
 # Task 7.1: Update Dependencies & Directory Structure
 
-**Status**: 🔄 Pending
+**Status**: ✅ Complete
 
 ## Overview
 
@@ -14,12 +14,13 @@ Update project dependencies and create new directory structure for AWS Bedrock A
 
 Add directories for action groups and orchestrators.
 
-- [ ] Create `apps/aws/src/agents/action-groups/` directory
-- [ ] Create `apps/aws/src/agents/orchestrators/` directory
-- [ ] Create `apps/aws/src/shared/bedrock-client.ts` for agent invocation utilities
-- [ ] Create `apps/aws/src/shared/session-manager.ts` for session tracking
+- [x] Create `apps/aws/src/agents/action-groups/` directory
+- [x] Create `apps/aws/src/agents/orchestrators/` directory
+- [x] Create `apps/aws/src/shared/bedrock-client.ts` for agent invocation utilities
+- [x] Create `apps/aws/src/shared/session-manager.ts` for session tracking
 
 **Updated Structure:**
+
 ```
 apps/aws/
 ├── src/
@@ -57,13 +58,14 @@ All TypeScript files use **kebab-case** (e.g., `build-tools.ts`, `combat-agent.t
 
 ## Validation
 
-- [ ] New directories created
+- [x] New directories created
 
 ---
 
 ## Next Steps
 
 After completing this task:
+
 1. Proceed to [Task 7.2: Define Bedrock Agents](./task-72-define-bedrock-agents.md)
 2. Begin implementing action group tools in tasks 7.3-7.8
 

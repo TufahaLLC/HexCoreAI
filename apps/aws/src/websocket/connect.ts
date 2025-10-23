@@ -15,6 +15,7 @@ import {
   YEAR_START_DAY,
   YEAR_START_MONTH,
 } from "../shared/constants";
+import { findCachedAnalysis } from "../shared/cache";
 import { getMatchIds } from "../shared/riot-api";
 import {
   type ConnectionParams,
@@ -145,6 +146,50 @@ export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event) => {
       sessionId,
       puuid,
       correlationId: sessionId,
+    });
+
+    // Check for cached analysis before enqueueing new work
+    const cachedAnalysis = await findCachedAnalysis({
+      puuid,
+      region,
+      year,
+    });
+
+    if (cachedAnalysis) {
+      logger.info("Found cached analysis, sending to client", {
+        correlationId: sessionId,
+        resultId: cachedAnalysis.resultId,
+        s3Key: cachedAnalysis.s3Key,
+      });
+
+      // Send WebSocket message with cached results
+      await sendWebSocketUpdate(sessionId, {
+        status: "completed",
+        message: "Analysis already available",
+        progress: 100,
+        data: {
+          resultId: cachedAnalysis.resultId,
+          s3Key: cachedAnalysis.s3Key,
+          synthesis: cachedAnalysis.synthesis,
+        },
+        timestamp: Date.now(),
+      });
+
+      logger.info("Cached analysis sent to client", {
+        connectionId,
+        sessionId,
+        correlationId: sessionId,
+      });
+
+      return { statusCode: 200, body: "Analysis already completed" };
+    }
+
+    // No cache found, proceed with normal processing
+    logger.info("No cached analysis found, proceeding with match processing", {
+      correlationId: sessionId,
+      puuid,
+      region,
+      year,
     });
 
     // Enqueue matches with idempotency - returns cached result on reconnect

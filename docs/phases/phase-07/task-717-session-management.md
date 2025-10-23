@@ -1,6 +1,6 @@
-# Task 7.17: Implement Session Tracking & Cleanup
+# Task 7.17: Implement Session Management Utilities
 
-**Status**: 🔄 Pending
+**Status**: ✅ Complete
 
 ## Overview
 
@@ -13,12 +13,14 @@ Implement session lifecycle management for Bedrock Agent invocations with automa
 The Phase 7 implementation generates unique session IDs using the pattern `${sessionId}-build-${Date.now()}` for agent isolation. While this prevents session collisions, it creates orphaned session state in Bedrock that accumulates over time.
 
 **The Problem:**
+
 - Bedrock Agent sessions don't automatically expire
 - Stale session data consumes memory
 - Potential performance degradation as session counts grow
 - Debugging challenges with expired session context
 
 **Scale Impact:**
+
 - 1 year analysis = 6 sessions (one per agent)
 - 100 users/day = 600 sessions/day = **219,000 sessions/year**
 
@@ -28,53 +30,55 @@ The Phase 7 implementation generates unique session IDs using the pattern `${ses
 
 ### 7.17.1: Create AgentSessionsTable in SAM Template
 
-- [ ] Add DynamoDB table definition
-- [ ] Configure TTL attribute for automatic expiration
-- [ ] Create GSI for querying sessions by user
-- [ ] Add table name to environment variables
+- [x] Add DynamoDB table definition
+- [x] Configure TTL attribute for automatic expiration
+- [x] Create GSI for querying sessions by user
+- [x] Add table name to environment variables
 
 **SAM Template Addition:**
+
 ```yaml
-  AgentSessionsTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: HexCore-AgentSessions
-      BillingMode: PAY_PER_REQUEST
-      AttributeDefinitions:
-        - AttributeName: sessionId
-          AttributeType: S
-        - AttributeName: userSessionId
-          AttributeType: S
-        - AttributeName: createdAt
-          AttributeType: N
-      KeySchema:
-        - AttributeName: sessionId
-          KeyType: HASH
-      GlobalSecondaryIndexes:
-        - IndexName: UserSessionIndex
-          KeySchema:
-            - AttributeName: userSessionId
-              KeyType: HASH
-            - AttributeName: createdAt
-              KeyType: RANGE
-          Projection:
-            ProjectionType: ALL
-      TimeToLiveSpecification:
-        AttributeName: ttl
-        Enabled: true
-      Tags:
-        - Key: Project
-          Value: HexCoreAI
+AgentSessionsTable:
+  Type: AWS::DynamoDB::Table
+  Properties:
+    TableName: HexCore-AgentSessions
+    BillingMode: PAY_PER_REQUEST
+    AttributeDefinitions:
+      - AttributeName: sessionId
+        AttributeType: S
+      - AttributeName: userSessionId
+        AttributeType: S
+      - AttributeName: createdAt
+        AttributeType: N
+    KeySchema:
+      - AttributeName: sessionId
+        KeyType: HASH
+    GlobalSecondaryIndexes:
+      - IndexName: UserSessionIndex
+        KeySchema:
+          - AttributeName: userSessionId
+            KeyType: HASH
+          - AttributeName: createdAt
+            KeyType: RANGE
+        Projection:
+          ProjectionType: ALL
+    TimeToLiveSpecification:
+      AttributeName: ttl
+      Enabled: true
+    Tags:
+      - Key: Project
+        Value: HexCoreAI
 ```
 
 ### 7.17.2: Add IAM Permissions
 
-- [ ] Grant DynamoDB PutItem permission
-- [ ] Grant DynamoDB UpdateItem permission
-- [ ] Grant DynamoDB Query permission
-- [ ] Add to all orchestrator function roles
+- [x] Grant DynamoDB PutItem permission
+- [x] Grant DynamoDB UpdateItem permission
+- [x] Grant DynamoDB Query permission
+- [x] Add to all orchestrator function roles
 
 **IAM Policy:**
+
 ```yaml
 - Effect: Allow
   Action:
@@ -88,27 +92,27 @@ The Phase 7 implementation generates unique session IDs using the pattern `${ses
 
 ### 7.17.3: Create Session Manager Utility
 
-- [ ] Create `apps/aws/src/shared/session-manager.ts`
-- [ ] Define SessionRecord interface
-- [ ] Implement registerAgentSession function
-- [ ] Implement markSessionComplete function
-- [ ] Implement markSessionFailed function
-- [ ] Implement getUserSessions function
-- [ ] Implement getSessionStats function
+- [x] Create `apps/aws/src/shared/session-manager.ts`
+- [x] Define SessionRecord interface
+- [x] Implement registerAgentSession function
+- [x] Implement markSessionComplete function
+- [x] Implement markSessionFailed function
+- [x] Implement getUserSessions function
+- [x] Implement getSessionStats function
 
 **File:** `apps/aws/src/shared/session-manager.ts`
 
 ```typescript
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { 
-  DynamoDBDocumentClient, 
-  PutCommand, 
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import {
+  DynamoDBDocumentClient,
+  PutCommand,
   UpdateCommand,
-  QueryCommand 
-} from '@aws-sdk/lib-dynamodb';
-import { Logger } from '@aws-lambda-powertools/logger';
+  QueryCommand,
+} from "@aws-sdk/lib-dynamodb";
+import { Logger } from "@aws-lambda-powertools/logger";
 
-const logger = new Logger({ serviceName: 'SessionManager' });
+const logger = new Logger({ serviceName: "SessionManager" });
 const ddbClient = new DynamoDBClient({});
 const ddb = DynamoDBDocumentClient.from(ddbClient);
 
@@ -116,15 +120,15 @@ const SESSIONS_TABLE = process.env.AGENT_SESSIONS_TABLE!;
 const SESSION_TTL_HOURS = 24;
 
 export interface SessionRecord {
-  sessionId: string;          // PK: Bedrock session ID
-  agentType: string;          // Build, Combat, Vision, etc.
-  userSessionId: string;      // Original WebSocket session ID
-  matchId?: string;           // Optional match context
-  createdAt: number;          // Unix timestamp (seconds)
-  ttl: number;                // Auto-delete timestamp
-  status: 'active' | 'completed' | 'failed';
-  completedAt?: number;       // Completion timestamp
-  errorMessage?: string;      // Error details if failed
+  sessionId: string; // PK: Bedrock session ID
+  agentType: string; // Build, Combat, Vision, etc.
+  userSessionId: string; // Original WebSocket session ID
+  matchId?: string; // Optional match context
+  createdAt: number; // Unix timestamp (seconds)
+  ttl: number; // Auto-delete timestamp
+  status: "active" | "completed" | "failed";
+  completedAt?: number; // Completion timestamp
+  errorMessage?: string; // Error details if failed
 }
 
 /**
@@ -137,7 +141,7 @@ export async function registerAgentSession(params: {
   matchId?: string;
 }): Promise<void> {
   const now = Math.floor(Date.now() / 1000);
-  const ttl = now + (SESSION_TTL_HOURS * 60 * 60);
+  const ttl = now + SESSION_TTL_HOURS * 60 * 60;
 
   const record: SessionRecord = {
     sessionId: params.sessionId,
@@ -146,22 +150,24 @@ export async function registerAgentSession(params: {
     matchId: params.matchId,
     createdAt: now,
     ttl,
-    status: 'active'
+    status: "active",
   };
 
   try {
-    await ddb.send(new PutCommand({
-      TableName: SESSIONS_TABLE,
-      Item: record
-    }));
+    await ddb.send(
+      new PutCommand({
+        TableName: SESSIONS_TABLE,
+        Item: record,
+      })
+    );
 
-    logger.info('Agent session registered', {
+    logger.info("Agent session registered", {
       sessionId: params.sessionId,
       agentType: params.agentType,
-      ttlExpiration: new Date(ttl * 1000).toISOString()
+      ttlExpiration: new Date(ttl * 1000).toISOString(),
     });
   } catch (error) {
-    logger.error('Failed to register session', { error, params });
+    logger.error("Failed to register session", { error, params });
     // Don't throw - session tracking is non-critical
   }
 }
@@ -176,23 +182,26 @@ export async function markSessionComplete(
   const now = Math.floor(Date.now() / 1000);
 
   try {
-    await ddb.send(new UpdateCommand({
-      TableName: SESSIONS_TABLE,
-      Key: { sessionId },
-      UpdateExpression: 'SET #status = :status, completedAt = :completedAt, metadata = :metadata',
-      ExpressionAttributeNames: {
-        '#status': 'status'
-      },
-      ExpressionAttributeValues: {
-        ':status': 'completed',
-        ':completedAt': now,
-        ':metadata': metadata || {}
-      }
-    }));
+    await ddb.send(
+      new UpdateCommand({
+        TableName: SESSIONS_TABLE,
+        Key: { sessionId },
+        UpdateExpression:
+          "SET #status = :status, completedAt = :completedAt, metadata = :metadata",
+        ExpressionAttributeNames: {
+          "#status": "status",
+        },
+        ExpressionAttributeValues: {
+          ":status": "completed",
+          ":completedAt": now,
+          ":metadata": metadata || {},
+        },
+      })
+    );
 
-    logger.info('Session marked complete', { sessionId, metadata });
+    logger.info("Session marked complete", { sessionId, metadata });
   } catch (error) {
-    logger.error('Failed to mark session complete', { error, sessionId });
+    logger.error("Failed to mark session complete", { error, sessionId });
   }
 }
 
@@ -206,23 +215,26 @@ export async function markSessionFailed(
   const now = Math.floor(Date.now() / 1000);
 
   try {
-    await ddb.send(new UpdateCommand({
-      TableName: SESSIONS_TABLE,
-      Key: { sessionId },
-      UpdateExpression: 'SET #status = :status, completedAt = :completedAt, errorMessage = :errorMessage',
-      ExpressionAttributeNames: {
-        '#status': 'status'
-      },
-      ExpressionAttributeValues: {
-        ':status': 'failed',
-        ':completedAt': now,
-        ':errorMessage': errorMessage
-      }
-    }));
+    await ddb.send(
+      new UpdateCommand({
+        TableName: SESSIONS_TABLE,
+        Key: { sessionId },
+        UpdateExpression:
+          "SET #status = :status, completedAt = :completedAt, errorMessage = :errorMessage",
+        ExpressionAttributeNames: {
+          "#status": "status",
+        },
+        ExpressionAttributeValues: {
+          ":status": "failed",
+          ":completedAt": now,
+          ":errorMessage": errorMessage,
+        },
+      })
+    );
 
-    logger.info('Session marked failed', { sessionId, errorMessage });
+    logger.info("Session marked failed", { sessionId, errorMessage });
   } catch (error) {
-    logger.error('Failed to mark session as failed', { error, sessionId });
+    logger.error("Failed to mark session as failed", { error, sessionId });
   }
 }
 
@@ -233,19 +245,21 @@ export async function getUserSessions(
   userSessionId: string
 ): Promise<SessionRecord[]> {
   try {
-    const response = await ddb.send(new QueryCommand({
-      TableName: SESSIONS_TABLE,
-      IndexName: 'UserSessionIndex',
-      KeyConditionExpression: 'userSessionId = :userSessionId',
-      ExpressionAttributeValues: {
-        ':userSessionId': userSessionId
-      },
-      ScanIndexForward: false // Most recent first
-    }));
+    const response = await ddb.send(
+      new QueryCommand({
+        TableName: SESSIONS_TABLE,
+        IndexName: "UserSessionIndex",
+        KeyConditionExpression: "userSessionId = :userSessionId",
+        ExpressionAttributeValues: {
+          ":userSessionId": userSessionId,
+        },
+        ScanIndexForward: false, // Most recent first
+      })
+    );
 
     return (response.Items || []) as SessionRecord[];
   } catch (error) {
-    logger.error('Failed to query user sessions', { error, userSessionId });
+    logger.error("Failed to query user sessions", { error, userSessionId });
     return [];
   }
 }
@@ -253,9 +267,7 @@ export async function getUserSessions(
 /**
  * Get session statistics for monitoring
  */
-export async function getSessionStats(
-  userSessionId: string
-): Promise<{
+export async function getSessionStats(userSessionId: string): Promise<{
   total: number;
   active: number;
   completed: number;
@@ -265,43 +277,44 @@ export async function getSessionStats(
 
   return {
     total: sessions.length,
-    active: sessions.filter(s => s.status === 'active').length,
-    completed: sessions.filter(s => s.status === 'completed').length,
-    failed: sessions.filter(s => s.status === 'failed').length
+    active: sessions.filter((s) => s.status === "active").length,
+    completed: sessions.filter((s) => s.status === "completed").length,
+    failed: sessions.filter((s) => s.status === "failed").length,
   };
 }
 ```
 
 ### 7.17.4: Integrate into Agent Orchestrators
 
-- [ ] Import session manager functions in all orchestrators
-- [ ] Call registerAgentSession() on start
-- [ ] Call markSessionComplete() on success
-- [ ] Call markSessionFailed() on error
-- [ ] Add AGENT_SESSIONS_TABLE environment variable
+- [x] Import session manager functions in all orchestrators
+- [x] Call registerAgentSession() on start
+- [x] Call markSessionComplete() on success
+- [x] Call markSessionFailed() on error
+- [x] Add AGENT_SESSIONS_TABLE environment variable
 
 **Integration Pattern:**
+
 ```typescript
-import { 
-  registerAgentSession, 
-  markSessionComplete, 
-  markSessionFailed 
-} from '../../shared/session-manager';
+import {
+  registerAgentSession,
+  markSessionComplete,
+  markSessionFailed,
+} from "../../shared/session-manager";
 
 // At start of handler
 const agentSessionId = `${sessionId}-build-${Date.now()}`;
 
 await registerAgentSession({
   sessionId: agentSessionId,
-  agentType: 'BuildAgent',
+  agentType: "BuildAgent",
   userSessionId: sessionId,
-  matchId
+  matchId,
 });
 
 // On success
 await markSessionComplete(agentSessionId, {
   toolsInvoked,
-  responseLength: fullResponse.length
+  responseLength: fullResponse.length,
 });
 
 // On error
@@ -310,33 +323,34 @@ await markSessionFailed(agentSessionId, error.message);
 
 ### 7.17.5: Add Monitoring and Debugging Tools
 
-- [ ] Create CloudWatch dashboard for session metrics
-- [ ] Add session cleanup verification script
+- [x] Create CloudWatch dashboard for session metrics
+- [x] Add session cleanup verification script
 
 **CloudWatch Dashboard:**
+
 ```yaml
-  SessionMetricsDashboard:
-    Type: AWS::CloudWatch::Dashboard
-    Properties:
-      DashboardName: HexCore-AgentSessions
-      DashboardBody: !Sub |
-        {
-          "widgets": [
-            {
-              "type": "metric",
-              "properties": {
-                "metrics": [
-                  ["AWS/DynamoDB", "ConsumedReadCapacityUnits"],
-                  [".", "ConsumedWriteCapacityUnits"]
-                ],
-                "period": 300,
-                "stat": "Average",
-                "region": "${AWS::Region}",
-                "title": "Session Table Activity"
-              }
+SessionMetricsDashboard:
+  Type: AWS::CloudWatch::Dashboard
+  Properties:
+    DashboardName: HexCore-AgentSessions
+    DashboardBody: !Sub |
+      {
+        "widgets": [
+          {
+            "type": "metric",
+            "properties": {
+              "metrics": [
+                ["AWS/DynamoDB", "ConsumedReadCapacityUnits"],
+                [".", "ConsumedWriteCapacityUnits"]
+              ],
+              "period": 300,
+              "stat": "Average",
+              "region": "${AWS::Region}",
+              "title": "Session Table Activity"
             }
-          ]
-        }
+          }
+        ]
+      }
 ```
 
 ---
@@ -349,17 +363,17 @@ await markSessionFailed(agentSessionId, error.message);
    registerAgentSession()
    • Status: 'active'
    • TTL: now + 24 hours
-   
+
 2. Processing
    ↓
    Agent invocation in progress
-   
+
 3. Completion
    ↓
    markSessionComplete() or markSessionFailed()
    • Status: 'completed' or 'failed'
    • Metadata saved
-   
+
 4. Expiration (24 hours later)
    ↓
    DynamoDB TTL auto-deletes record
@@ -413,6 +427,7 @@ aws dynamodb scan \
 ## Next Steps
 
 After completing this task:
+
 1. Proceed to [Task 7.18: Deploy & Test Bedrock Agents](./task-718-deployment-testing.md)
 2. Validate session tracking in production
 

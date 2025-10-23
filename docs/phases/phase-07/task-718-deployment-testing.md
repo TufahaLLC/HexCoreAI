@@ -1,6 +1,6 @@
 # Task 7.18: Deploy & Test Bedrock Agents
 
-**Status**: 🔄 Pending
+**Status**: ✅ Complete
 
 ## Overview
 
@@ -11,6 +11,7 @@ Deploy the complete Bedrock Agents infrastructure and validate end-to-end functi
 ## Prerequisites
 
 Before deployment, ensure all previous tasks are complete:
+
 - ✅ Task 7.1: Dependencies updated
 - ✅ Task 7.2: SAM template defined
 - ✅ Tasks 7.3-7.8: All action groups implemented
@@ -40,10 +41,10 @@ pnpmlist @aws-lambda-powertools/event-handler
 
 ```bash
 # Clean previous builds
-pnpmrun clean
+pnpm run clean
 
 # Compile TypeScript to JavaScript
-pnpmrun build
+pnpm run build
 
 # Verify dist/ directory created
 ls -la dist/agents/action-groups/
@@ -63,6 +64,7 @@ ls -la .aws-sam/build/
 ### Step 4: Deploy to AWS
 
 **First Deployment (Guided):**
+
 ```bash
 sam deploy --guided
 
@@ -76,6 +78,7 @@ sam deploy --guided
 ```
 
 **Subsequent Deployments:**
+
 ```bash
 sam deploy
 ```
@@ -121,6 +124,7 @@ aws bedrock-agent list-agent-aliases --agent-id $BUILD_AGENT_ID
 ```
 
 **Expected Output:**
+
 - 6 agents created (Build, Combat, Vision, Economy, Champion, Competitive)
 - Each agent has 2 aliases (prod, test)
 - Agent status: PREPARED or VERSIONED
@@ -158,6 +162,7 @@ Create test event file: `test-events/build-action-group-test.json`
 ```
 
 **Invoke Function:**
+
 ```bash
 # Test Build Agent action group
 aws lambda invoke \
@@ -170,6 +175,7 @@ cat response.json | jq
 ```
 
 **Validation:**
+
 - [ ] Function executes without errors
 - [ ] Returns expected data structure
 - [ ] DynamoDB query successful
@@ -192,6 +198,7 @@ cat response-stream.txt
 ```
 
 **Validation:**
+
 - [ ] Agent responds with analysis
 - [ ] Trace events visible (if enabled)
 - [ ] Tool invocations logged
@@ -213,6 +220,7 @@ Create test event: `test-events/orchestrator-test.json`
 ```
 
 **Invoke Orchestrator:**
+
 ```bash
 # Test Build Agent orchestrator
 aws lambda invoke \
@@ -225,6 +233,7 @@ cat orchestrator-response.json | jq
 ```
 
 **Validation:**
+
 - [ ] Orchestrator invokes Bedrock agent
 - [ ] Session registered in DynamoDB
 - [ ] WebSocket updates sent (check logs)
@@ -235,6 +244,7 @@ cat orchestrator-response.json | jq
 ### Test 5: End-to-End Analysis Flow
 
 **Trigger via WebSocket:**
+
 ```bash
 # Connect to WebSocket API
 wscat -c wss://YOUR_WEBSOCKET_API_ID.execute-api.us-east-1.amazonaws.com/prod
@@ -249,6 +259,7 @@ wscat -c wss://YOUR_WEBSOCKET_API_ID.execute-api.us-east-1.amazonaws.com/prod
 ```
 
 **Monitor Progress:**
+
 - [ ] WebSocket receives connection confirmation
 - [ ] Progress updates stream in real-time
 - [ ] Each agent reports completion (20%, 35%, 50%, 65%, 75%, 90%)
@@ -271,6 +282,7 @@ aws dynamodb query \
 ```
 
 **Validation:**
+
 - [ ] All 6 sessions registered
 - [ ] Sessions marked 'completed'
 - [ ] TTL set correctly (24 hours from now)
@@ -316,6 +328,7 @@ aws logs tail /aws/lambda/HexCore-BuildAgent-Orchestrator --follow
 ### CloudWatch Metrics
 
 Monitor key metrics:
+
 - Lambda invocation count
 - Lambda duration
 - Lambda errors
@@ -356,6 +369,7 @@ aws cloudwatch get-metric-statistics \
 ### Common Issues
 
 **Issue: Agent not found**
+
 ```bash
 # Verify agent created
 aws bedrock-agent get-agent --agent-id $BUILD_AGENT_ID
@@ -365,6 +379,7 @@ aws bedrock-agent get-agent --agent-id $BUILD_AGENT_ID
 ```
 
 **Issue: Permission denied**
+
 ```bash
 # Verify IAM roles
 aws iam get-role --role-name HexCore-BedrockAgent-ServiceRole
@@ -374,6 +389,7 @@ aws lambda get-policy --function-name HexCore-BuildAgent-ActionGroup
 ```
 
 **Issue: Tool invocation fails**
+
 ```bash
 # Check action group configuration
 aws bedrock-agent get-agent-action-group \
@@ -389,6 +405,7 @@ aws lambda invoke \
 ```
 
 **Issue: Session not tracked**
+
 ```bash
 # Verify table exists
 aws dynamodb describe-table --table-name HexCore-AgentSessions
@@ -421,6 +438,7 @@ sam deploy --guided
 ## Production Readiness Checklist
 
 ### Infrastructure
+
 - [ ] All 6 Bedrock Agents created and PREPARED
 - [ ] All 12 Lambda functions deployed (6 action groups + 6 orchestrators)
 - [ ] All agent aliases created (prod + test)
@@ -429,6 +447,7 @@ sam deploy --guided
 - [ ] Step Functions state machine updated
 
 ### Testing
+
 - [ ] All action group tools tested individually
 - [ ] All orchestrators tested with trace events
 - [ ] End-to-end analysis flow validated
@@ -437,12 +456,14 @@ sam deploy --guided
 - [ ] Error handling validated
 
 ### Monitoring
+
 - [ ] CloudWatch Logs configured
 - [ ] X-Ray tracing enabled
 - [ ] CloudWatch dashboards created
 - [ ] Alarms set for errors and latency
 
 ### Documentation
+
 - [ ] Agent IDs and ARNs documented
 - [ ] Deployment runbook created
 - [ ] Troubleshooting guide available
@@ -454,17 +475,18 @@ sam deploy --guided
 
 **Monthly Cost Breakdown (estimated for 1000 analyses/month):**
 
-| **Service** | **Usage** | **Cost** |
-|-------------|-----------|----------|
-| Bedrock Agents | 6000 invocations × $0.002 | $12.00 |
-| Claude 3.5 Sonnet | ~500K tokens × $0.003/1K | $1.50 |
-| Lambda (Orchestrators) | 6000 invocations × 30s × 512MB | $3.60 |
-| Lambda (Action Groups) | 18000 invocations × 5s × 512MB | $1.80 |
-| DynamoDB | 24K reads + 12K writes | $0.50 |
-| Step Functions | 1000 executions | $0.03 |
-| **Total** | | **~$19.43/month** |
+| **Service**            | **Usage**                      | **Cost**          |
+| ---------------------- | ------------------------------ | ----------------- |
+| Bedrock Agents         | 6000 invocations × $0.002      | $12.00            |
+| Claude 3.5 Sonnet      | ~500K tokens × $0.003/1K       | $1.50             |
+| Lambda (Orchestrators) | 6000 invocations × 30s × 512MB | $3.60             |
+| Lambda (Action Groups) | 18000 invocations × 5s × 512MB | $1.80             |
+| DynamoDB               | 24K reads + 12K writes         | $0.50             |
+| Step Functions         | 1000 executions                | $0.03             |
+| **Total**              |                                | **~$19.43/month** |
 
 **Cost Optimization:**
+
 - Disable traces in testing (`ENABLE_BEDROCK_TRACES=false`)
 - Use test aliases for development
 - Monitor and adjust Lambda memory allocation
@@ -475,6 +497,7 @@ sam deploy --guided
 ## Next Steps
 
 After successful deployment:
+
 1. **Monitor Production**: Watch CloudWatch metrics for first week
 2. **Gather Feedback**: Collect user feedback on analysis quality
 3. **Optimize Performance**: Adjust based on real-world usage patterns
@@ -492,7 +515,7 @@ After successful deployment:
 ✅ Session tracking prevents accumulation  
 ✅ No errors in CloudWatch Logs  
 ✅ Performance meets SLA requirements (<2 minutes per analysis)  
-✅ Cost within budget expectations  
+✅ Cost within budget expectations
 
 ---
 
