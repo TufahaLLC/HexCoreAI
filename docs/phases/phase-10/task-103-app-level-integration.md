@@ -4,8 +4,8 @@ Wrap the Next.js app with the `WebSocketProvider` so any client component can ac
 
 ## Subtasks
 
-- [ ] Import the provider in `apps/web/src/app/layout.tsx`
-- [ ] Wrap the application tree
+- [x] Import the provider in `apps/web/src/app/layout.tsx`
+- [x] Wrap the application tree
 
 ## Option A: Minimal example (from guide)
 
@@ -56,8 +56,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
 ## Validation
 
-- [ ] App compiles
-- [ ] Provider renders on all pages
+- [x] App compiles
+- [x] Provider renders on all pages
 
 ## Next
 

@@ -10,11 +10,15 @@ import {
   BACKOFF_MULTIPLIER,
   DEFAULT_MAX_RETRIES,
   RATE_LIMIT_STATUS_CODES,
+  RIOT_MAX_MATCH_COUNT,
+  RIOT_UNAUTHORIZED_STATUS_CODES,
 } from "./constants";
 import type {
   ItemPurchase,
   MatchData,
+  RiotLeagueEntry,
   RiotMatchResponse,
+  RiotSummonerResponse,
   RiotTimelineResponse,
 } from "./types";
 
@@ -46,11 +50,13 @@ async function makeRequestWithRetry<T>(
   url: string,
   maxRetries = DEFAULT_MAX_RETRIES
 ): Promise<T> {
-  const apiKey = await getRiotApiKey();
   let retries = 0;
 
   while (retries < maxRetries) {
     try {
+      const apiKey = await getRiotApiKey();
+      logger.debug("Calling Riot API", { url });
+
       const response = await axios.get<T>(url, {
         headers: {
           "X-Riot-Token": apiKey,
@@ -60,28 +66,46 @@ async function makeRequestWithRetry<T>(
     } catch (error) {
       const axiosError = error as AxiosError;
 
-      if (axiosError.response?.status) {
-        const statusCode = axiosError.response.status;
-
-        if (!RATE_LIMIT_STATUS_CODES.has(statusCode)) {
-          throw error;
-        }
-        // Rate limit or service unavailable - exponential backoff
-        const exponentialDelay =
-          BACKOFF_MULTIPLIER ** retries * BACKOFF_BASE_MS;
-        const jitter = Math.random() * BACKOFF_JITTER_RANGE_MS;
-        const delay = exponentialDelay + jitter;
-        logger.info("Rate limited, retrying request", {
-          delay,
-          attempt: retries + 1,
-          maxRetries,
-          url,
-        });
-        await new Promise((resolve) => setTimeout(resolve, delay));
-        retries++;
-      } else {
+      const statusCode = axiosError.response?.status;
+      if (!statusCode) {
         throw error;
       }
+
+      if (RIOT_UNAUTHORIZED_STATUS_CODES.has(statusCode)) {
+        logger.warn(
+          "Riot API returned unauthorized response, refreshing secret",
+          {
+            statusCode,
+            url,
+            attempt: retries + 1,
+          }
+        );
+        cachedApiKey = null;
+        retries++;
+        continue;
+      }
+
+      if (!RATE_LIMIT_STATUS_CODES.has(statusCode)) {
+        logger.error("Riot API request failed", {
+          url,
+          statusCode,
+          responseData: axiosError.response?.data,
+        });
+        throw error;
+      }
+
+      // Rate limit or service unavailable - exponential backoff
+      const exponentialDelay = BACKOFF_MULTIPLIER ** retries * BACKOFF_BASE_MS;
+      const jitter = Math.random() * BACKOFF_JITTER_RANGE_MS;
+      const delay = exponentialDelay + jitter;
+      logger.info("Rate limited, retrying request", {
+        delay,
+        attempt: retries + 1,
+        maxRetries,
+        url,
+      });
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      retries++;
     }
   }
 
@@ -93,15 +117,23 @@ export function getMatchIds({
   puuid,
   startTime,
   endTime,
-  count = 100,
+  count = RIOT_MAX_MATCH_COUNT,
+  queue,
 }: {
   region: string;
   puuid: string;
   startTime: number;
   endTime: number;
   count?: number;
+  queue?: number;
 }): Promise<string[]> {
-  const url = `https://${region}.api.riotgames.com/lol/match/v5/matches/by-puuid/${puuid}/ids?startTime=${startTime}&endTime=${endTime}&start=0&count=${count}`;
+  let url = `https://${region}.api.riotgames.com/lol/match/v5/matches/by-puuid/${puuid}/ids?startTime=${startTime}&endTime=${endTime}&start=0&count=${count}`;
+
+  // Add queue filter if specified (e.g., 420 for Ranked Solo/Duo)
+  if (queue !== undefined) {
+    url += `&queue=${queue}`;
+  }
+
   return makeRequestWithRetry<string[]>(url);
 }
 
@@ -121,6 +153,50 @@ export function getMatchTimeline(
   return makeRequestWithRetry<RiotTimelineResponse>(url);
 }
 
+/**
+ * Get summoner data by PUUID
+ */
+export function getSummonerByPuuid(
+  region: string,
+  puuid: string
+): Promise<RiotSummonerResponse> {
+  const url = `https://${region}.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/${puuid}`;
+  return makeRequestWithRetry<RiotSummonerResponse>(url);
+}
+
+/**
+ * Fetch summoner rank data from Riot API
+ */
+export async function getSummonerRank(region: string, summonerId: string) {
+  const url = `https://${region}.api.riotgames.com/lol/league/v4/entries/by-summoner/${summonerId}`;
+  const entries: RiotLeagueEntry[] = await makeRequestWithRetry(url);
+
+  // Find ranked solo/duo entry
+  const rankedEntry = entries.find(
+    (entry) => entry.queueType === "RANKED_SOLO_5x5"
+  );
+
+  if (!rankedEntry) {
+    return {
+      tier: "UNRANKED",
+      rank: "",
+      leaguePoints: 0,
+      wins: 0,
+      losses: 0,
+      winRate: 0,
+    };
+  }
+
+  return {
+    tier: rankedEntry.tier,
+    rank: rankedEntry.rank,
+    leaguePoints: rankedEntry.leaguePoints,
+    wins: rankedEntry.wins,
+    losses: rankedEntry.losses,
+    winRate: rankedEntry.wins / (rankedEntry.wins + rankedEntry.losses),
+  };
+}
+
 export function filterMatchData(
   matchData: RiotMatchResponse,
   timelineData: RiotTimelineResponse,
@@ -135,8 +211,32 @@ export function filterMatchData(
     throw new Error(`Participant not found for PUUID: ${puuid}`);
   }
 
+  // Calculate game duration in seconds
+  const gameDurationSeconds = matchData.info.gameDuration;
+  const gameDurationMinutes = gameDurationSeconds / 60;
+
   // Filter to agent-required fields
   return {
+    // Game metadata
+    gameInfo: {
+      gameDuration: gameDurationSeconds,
+      gameDurationMinutes,
+      gameMode: matchData.info.gameMode,
+      gameType: matchData.info.gameType,
+      queueId: matchData.info.queueId,
+      gameVersion: matchData.info.gameVersion,
+      platformId: matchData.info.platformId,
+    },
+
+    // Player outcome
+    playerInfo: {
+      participantId: participant.participantId,
+      teamId: participant.teamId,
+      win: participant.win,
+      summonerName: participant.summonerName || participant.riotIdGameName,
+      championLevel: participant.champLevel,
+    },
+
     build: {
       items: [
         participant.item0,
@@ -146,7 +246,7 @@ export function filterMatchData(
         participant.item4,
         participant.item5,
         participant.item6,
-      ].filter((item) => item !== 0),
+      ].filter((item: number) => item !== 0),
       itemTimeline: extractItemTimeline(
         timelineData,
         participant.participantId
@@ -156,6 +256,7 @@ export function filterMatchData(
         participant.participantId
       ),
     },
+
     combat: {
       kills: participant.kills,
       deaths: participant.deaths,
@@ -172,26 +273,62 @@ export function filterMatchData(
         true: participant.trueDamageTaken,
         total: participant.totalDamageTaken,
       },
+      largestKillingSpree: participant.largestKillingSpree,
+      largestMultiKill: participant.largestMultiKill,
+      doubleKills: participant.doubleKills,
+      tripleKills: participant.tripleKills,
+      quadraKills: participant.quadraKills,
+      pentaKills: participant.pentaKills,
     },
+
     vision: {
       wardsPlaced: participant.wardsPlaced,
       wardsDestroyed: participant.wardsKilled,
       visionScore: participant.visionScore,
+      visionScorePerMinute: participant.visionScore / gameDurationMinutes,
+      controlWardsBought: participant.visionWardsBoughtInGame || 0,
     },
+
     economy: {
       totalGold: participant.goldEarned,
+      goldSpent: participant.goldSpent,
       csPerMinute:
         (participant.totalMinionsKilled + participant.neutralMinionsKilled) /
-        (matchData.info.gameDuration / 60),
+        gameDurationMinutes,
       goldEfficiency: participant.goldSpent / participant.goldEarned,
+      goldPerMinute: participant.goldEarned / gameDurationMinutes,
+      totalMinionsKilled: participant.totalMinionsKilled,
+      neutralMinionsKilled: participant.neutralMinionsKilled,
+      csAtEnd:
+        participant.totalMinionsKilled + participant.neutralMinionsKilled,
     },
+
     championMeta: {
       champion: participant.championName,
+      championId: participant.championId,
       role: participant.teamPosition,
       tier: "A", // Would fetch from external API or database
       winRate: 0.52, // Would fetch from external API or database
     },
-  };
+
+    // Team composition for BuildAgent recommendations
+    teamComposition: {
+      allies: matchData.info.participants
+        .filter(
+          (p: any) => p.teamId === participant.teamId && p.puuid !== puuid
+        )
+        .map((p: any) => ({
+          championName: p.championName,
+          role: p.teamPosition,
+        })),
+      enemies: matchData.info.participants
+        .filter((p: any) => p.teamId !== participant.teamId)
+        .map((p: any) => ({
+          championName: p.championName,
+          role: p.teamPosition,
+        })),
+    },
+  } as any;
 }
 
 function extractItemTimeline(
@@ -232,4 +369,209 @@ function extractGoldPerMinute(
   }
 
   return goldPerMinute;
+}
+
+// ==================== Timeline Extraction Helpers ====================
+
+/**
+ * Extract position timeline from match timeline data
+ */
+export function extractPositionTimeline(
+  timelineData: RiotTimelineResponse,
+  participantId: number
+): Array<{ timestamp: number; x: number; y: number }> {
+  const positions: Array<{ timestamp: number; x: number; y: number }> = [];
+
+  for (const frame of timelineData.info.frames) {
+    const participantFrame = frame.participantFrames[participantId];
+    if (participantFrame?.position) {
+      positions.push({
+        timestamp: frame.timestamp,
+        x: participantFrame.position.x,
+        y: participantFrame.position.y,
+      });
+    }
+  }
+
+  return positions;
+}
+
+/**
+ * Extract CS (creep score) at specific time intervals
+ */
+export function extractCSAtTime(
+  timelineData: RiotTimelineResponse,
+  participantId: number,
+  timeMinutes: number
+): number {
+  const targetTimestamp = timeMinutes * 60 * 1000; // Convert to milliseconds
+
+  for (const frame of timelineData.info.frames) {
+    if (frame.timestamp >= targetTimestamp) {
+      const participantFrame = frame.participantFrames[participantId];
+      if (participantFrame) {
+        return (
+          (participantFrame.minionsKilled || 0) +
+          (participantFrame.jungleMinionsKilled || 0)
+        );
+      }
+    }
+  }
+
+  return 0;
+}
+
+/**
+ * Extract gold at specific time intervals
+ */
+export function extractGoldAtTime(
+  timelineData: RiotTimelineResponse,
+  participantId: number,
+  timeMinutes: number
+): number {
+  const targetTimestamp = timeMinutes * 60 * 1000;
+
+  for (const frame of timelineData.info.frames) {
+    if (frame.timestamp >= targetTimestamp) {
+      const participantFrame = frame.participantFrames[participantId];
+      if (participantFrame) {
+        return participantFrame.totalGold;
+      }
+    }
+  }
+
+  return 0;
+}
+
+/**
+ * Extract level progression over time
+ */
+export function extractLevelProgression(
+  timelineData: RiotTimelineResponse,
+  participantId: number
+): Array<{ timestamp: number; level: number }> {
+  const levels: Array<{ timestamp: number; level: number }> = [];
+
+  for (const frame of timelineData.info.frames) {
+    const participantFrame = frame.participantFrames[participantId];
+    if (participantFrame) {
+      levels.push({
+        timestamp: frame.timestamp,
+        level: participantFrame.level,
+      });
+    }
+  }
+
+  return levels;
+}
+
+/**
+ * Extract damage events from timeline
+ */
+export function extractDamageEvents(
+  timelineData: RiotTimelineResponse,
+  participantId: number
+): Array<{ timestamp: number; damageDealt: number; damageTaken: number }> {
+  const damageEvents: Array<{
+    timestamp: number;
+    damageDealt: number;
+    damageTaken: number;
+  }> = [];
+
+  for (const frame of timelineData.info.frames) {
+    const participantFrame = frame.participantFrames[participantId];
+    if (participantFrame) {
+      damageEvents.push({
+        timestamp: frame.timestamp,
+        damageDealt:
+          participantFrame.damageStats?.totalDamageDoneToChampions || 0,
+        damageTaken: participantFrame.damageStats?.totalDamageTaken || 0,
+      });
+    }
+  }
+
+  return damageEvents;
+}
+
+/**
+ * Extract objective events (dragon, baron, herald, tower kills)
+ */
+export function extractObjectiveEvents(
+  timelineData: RiotTimelineResponse,
+  teamId: number
+): Array<{ type: string; timestamp: number; killer?: number }> {
+  const objectives: Array<{
+    type: string;
+    timestamp: number;
+    killer?: number;
+  }> = [];
+
+  for (const frame of timelineData.info.frames) {
+    if (frame.events) {
+      for (const event of frame.events) {
+        if (
+          (event.type === "ELITE_MONSTER_KILL" ||
+            event.type === "BUILDING_KILL") &&
+          (event.teamId === teamId || event.killerTeamId === teamId)
+        ) {
+          objectives.push({
+            type: event.monsterType || event.buildingType || "UNKNOWN",
+            timestamp: event.timestamp,
+            killer: event.killerId,
+          });
+        }
+      }
+    }
+  }
+
+  return objectives;
+}
+
+/**
+ * Calculate performance by game phase
+ */
+export function calculatePhasePerformance(
+  timelineData: RiotTimelineResponse,
+  participantId: number
+): {
+  earlyGame: { cs: number; gold: number; level: number };
+  midGame: { cs: number; gold: number; level: number };
+  lateGame: { cs: number; gold: number; level: number };
+} {
+  return {
+    earlyGame: {
+      cs: extractCSAtTime(timelineData, participantId, 10),
+      gold: extractGoldAtTime(timelineData, participantId, 10),
+      level: extractLevelAtTime(timelineData, participantId, 10),
+    },
+    midGame: {
+      cs: extractCSAtTime(timelineData, participantId, 20),
+      gold: extractGoldAtTime(timelineData, participantId, 20),
+      level: extractLevelAtTime(timelineData, participantId, 20),
+    },
+    lateGame: {
+      cs: extractCSAtTime(timelineData, participantId, 30),
+      gold: extractGoldAtTime(timelineData, participantId, 30),
+      level: extractLevelAtTime(timelineData, participantId, 30),
+    },
+  };
+}
+
+function extractLevelAtTime(
+  timelineData: RiotTimelineResponse,
+  participantId: number,
+  timeMinutes: number
+): number {
+  const targetTimestamp = timeMinutes * 60 * 1000;
+
+  for (const frame of timelineData.info.frames) {
+    if (frame.timestamp >= targetTimestamp) {
+      const participantFrame = frame.participantFrames[participantId];
+      if (participantFrame) {
+        return participantFrame.level;
+      }
+    }
+  }
+
+  return 1;
 }

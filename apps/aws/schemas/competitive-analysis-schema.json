@@ -1,0 +1,169 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Competitive Analysis Tools API",
+    "version": "1.0.0",
+    "description": "Tools for analyzing competitive performance, rankings, and meta trends"
+  },
+  "paths": {
+    "/getRankProgressionData": {
+      "post": {
+        "summary": "Get Rank Progression Data",
+        "description": "Retrieve ranked statistics and current rank information",
+        "operationId": "getRankProgressionData",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "puuid": {
+                    "type": "string",
+                    "description": "The player UUID"
+                  },
+                  "season": {
+                    "type": "string",
+                    "description": "The season identifier"
+                  }
+                },
+                "required": ["puuid", "season"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "currentRank": { "type": "string" },
+                    "tier": { "type": "string" },
+                    "wins": { "type": "number" },
+                    "losses": { "type": "number" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/analyzeRankTrends": {
+      "post": {
+        "summary": "Analyze Rank Trends",
+        "description": "Analyze climb efficiency, win/loss trends, and LP gains",
+        "operationId": "analyzeRankTrends",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "currentRank": {
+                    "type": "string",
+                    "description": "Current rank"
+                  },
+                  "wins": {
+                    "type": "number",
+                    "description": "Number of wins"
+                  },
+                  "losses": {
+                    "type": "number",
+                    "description": "Number of losses"
+                  },
+                  "recentMatchesJson": {
+                    "type": "string",
+                    "description": "JSON string of recent match results"
+                  }
+                },
+                "required": [
+                  "currentRank",
+                  "wins",
+                  "losses",
+                  "recentMatchesJson"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "winRate": { "type": "string" },
+                    "trend": { "type": "string" },
+                    "insights": {
+                      "type": "array",
+                      "items": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/predictRankProgression": {
+      "post": {
+        "summary": "Predict Rank Progression",
+        "description": "Predict future rank progression based on current performance",
+        "operationId": "predictRankProgression",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "currentRank": {
+                    "type": "string",
+                    "description": "Current rank"
+                  },
+                  "winRate": {
+                    "type": "number",
+                    "description": "Current win rate"
+                  },
+                  "gamesPlayed": {
+                    "type": "number",
+                    "description": "Games played this season"
+                  }
+                },
+                "required": ["currentRank", "winRate", "gamesPlayed"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "projectedRank": { "type": "string" },
+                    "confidence": { "type": "string" },
+                    "recommendations": {
+                      "type": "array",
+                      "items": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

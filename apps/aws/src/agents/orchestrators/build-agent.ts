@@ -5,27 +5,27 @@
  * Progress range: 20-35%
  */
 
-import type { Handler } from "aws-lambda";
 import { Logger } from "@aws-lambda-powertools/logger";
-import { Tracer } from "@aws-lambda-powertools/tracer";
+import type { Handler } from "aws-lambda";
 import { ZodError } from "zod";
-import { sendWebSocketUpdate } from "../../shared/websocket-client";
 import {
-  invokeBedrockAgentWithTracing,
   formatAgentInput,
+  invokeBedrockAgentWithTracing,
+  resolveAgentEnvironment,
 } from "../../shared/bedrock-client";
 import {
-  registerSession,
+  type AgentOrchestratorInput,
+  agentOrchestratorInputSchema,
+} from "../../shared/schemas";
+import {
   completeSession,
   failSession,
   generateSessionId,
+  registerSession,
 } from "../../shared/session-manager";
-import {
-  agentOrchestratorInputSchema,
-  type AgentOrchestratorInput,
-} from "../../shared/schemas";
+import { sendWebSocketUpdate } from "../../shared/websocket-client";
 
-interface BuildAgentOutput {
+type BuildAgentOutput = {
   agentName: string;
   status: "success" | "failed";
   analysis: string;
@@ -35,10 +35,9 @@ interface BuildAgentOutput {
     executionTimeMs?: number;
     toolInvocations?: number;
   };
-}
+};
 
 const logger = new Logger({ serviceName: "BuildAgentOrchestrator" });
-const tracer = new Tracer({ serviceName: "BuildAgentOrchestrator" });
 
 /**
  * Main handler for Build Agent orchestration
@@ -85,7 +84,10 @@ async function invokeBuildAgent(
 ): Promise<BuildAgentOutput> {
   const { sessionId, matchId, puuid } = input;
   let toolInvocationCount = 0;
-  let currentProgress = 20;
+  const currentProgress = 20;
+  const { agentId, agentAliasId } = resolveAgentEnvironment("build", {
+    agentLabel: "BuildAgent",
+  });
 
   // Generate isolated session ID for this agent
   const agentSessionId = generateSessionId("BuildAgent", matchId);
@@ -109,8 +111,8 @@ async function invokeBuildAgent(
 
     // Invoke agent with enhanced trace handling
     const result = await invokeBedrockAgentWithTracing({
-      agentId: process.env.BUILD_AGENT_ID!,
-      agentAliasId: process.env.BUILD_AGENT_ALIAS_ID!,
+      agentId,
+      agentAliasId,
       sessionId: agentSessionId,
       inputText: formatAgentInput({
         analysisType: "build optimization",

@@ -1,0 +1,157 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Combat Analysis Tools API",
+    "version": "1.0.0",
+    "description": "Tools for analyzing teamfights, skirmishes, and combat effectiveness"
+  },
+  "paths": {
+    "/getMatchCombatData": {
+      "post": {
+        "summary": "Get Match Combat Data",
+        "description": "Retrieve combat statistics including KDA and damage data",
+        "operationId": "getMatchCombatData",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "matchId": {
+                    "type": "string",
+                    "description": "The match ID"
+                  },
+                  "puuid": {
+                    "type": "string",
+                    "description": "The player UUID"
+                  }
+                },
+                "required": ["matchId", "puuid"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "kills": { "type": "number" },
+                    "deaths": { "type": "number" },
+                    "assists": { "type": "number" },
+                    "damageDealt": { "type": "object" },
+                    "damageReceived": { "type": "object" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/analyzeDamageOutput": {
+      "post": {
+        "summary": "Analyze Damage Output",
+        "description": "Analyze damage patterns, efficiency, and survivability",
+        "operationId": "analyzeDamageOutput",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "damageDealtJson": {
+                    "type": "string",
+                    "description": "JSON string of damage dealt"
+                  },
+                  "damageReceivedJson": {
+                    "type": "string",
+                    "description": "JSON string of damage received"
+                  }
+                },
+                "required": ["damageDealtJson", "damageReceivedJson"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "damageEfficiency": { "type": "object" },
+                    "insights": {
+                      "type": "array",
+                      "items": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/evaluateTeamfightParticipation": {
+      "post": {
+        "summary": "Evaluate Teamfight Participation",
+        "description": "Evaluate teamfight participation and impact",
+        "operationId": "evaluateTeamfightParticipation",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "kills": {
+                    "type": "number",
+                    "description": "Number of kills"
+                  },
+                  "deaths": {
+                    "type": "number",
+                    "description": "Number of deaths"
+                  },
+                  "assists": {
+                    "type": "number",
+                    "description": "Number of assists"
+                  },
+                  "teamKills": {
+                    "type": "number",
+                    "description": "Total team kills"
+                  }
+                },
+                "required": ["kills", "deaths", "assists", "teamKills"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "kda": { "type": "number" },
+                    "killParticipation": { "type": "string" },
+                    "rating": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

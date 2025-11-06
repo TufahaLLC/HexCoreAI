@@ -22,6 +22,15 @@
               },
               "Retry": [
                 {
+                  "ErrorEquals": [
+                    "Lambda.TooManyRequestsException",
+                    "Lambda.ServiceException"
+                  ],
+                  "IntervalSeconds": 1,
+                  "MaxAttempts": 5,
+                  "BackoffRate": 2
+                },
+                {
                   "ErrorEquals": ["States.TaskFailed"],
                   "IntervalSeconds": 2,
                   "MaxAttempts": 3,
@@ -62,6 +71,15 @@
                 }
               },
               "Retry": [
+                {
+                  "ErrorEquals": [
+                    "Lambda.TooManyRequestsException",
+                    "Lambda.ServiceException"
+                  ],
+                  "IntervalSeconds": 1,
+                  "MaxAttempts": 5,
+                  "BackoffRate": 2
+                },
                 {
                   "ErrorEquals": ["States.TaskFailed"],
                   "IntervalSeconds": 2,
@@ -104,6 +122,15 @@
               },
               "Retry": [
                 {
+                  "ErrorEquals": [
+                    "Lambda.TooManyRequestsException",
+                    "Lambda.ServiceException"
+                  ],
+                  "IntervalSeconds": 1,
+                  "MaxAttempts": 5,
+                  "BackoffRate": 2
+                },
+                {
                   "ErrorEquals": ["States.TaskFailed"],
                   "IntervalSeconds": 2,
                   "MaxAttempts": 3,
@@ -144,6 +171,15 @@
                 }
               },
               "Retry": [
+                {
+                  "ErrorEquals": [
+                    "Lambda.TooManyRequestsException",
+                    "Lambda.ServiceException"
+                  ],
+                  "IntervalSeconds": 1,
+                  "MaxAttempts": 5,
+                  "BackoffRate": 2
+                },
                 {
                   "ErrorEquals": ["States.TaskFailed"],
                   "IntervalSeconds": 2,
@@ -186,6 +222,15 @@
               },
               "Retry": [
                 {
+                  "ErrorEquals": [
+                    "Lambda.TooManyRequestsException",
+                    "Lambda.ServiceException"
+                  ],
+                  "IntervalSeconds": 1,
+                  "MaxAttempts": 5,
+                  "BackoffRate": 2
+                },
+                {
                   "ErrorEquals": ["States.TaskFailed"],
                   "IntervalSeconds": 2,
                   "MaxAttempts": 3,
@@ -227,6 +272,15 @@
               },
               "Retry": [
                 {
+                  "ErrorEquals": [
+                    "Lambda.TooManyRequestsException",
+                    "Lambda.ServiceException"
+                  ],
+                  "IntervalSeconds": 1,
+                  "MaxAttempts": 5,
+                  "BackoffRate": 2
+                },
+                {
                   "ErrorEquals": ["States.TaskFailed"],
                   "IntervalSeconds": 2,
                   "MaxAttempts": 3,
@@ -253,6 +307,60 @@
         }
       ],
       "ResultPath": "$.agentResults",
+      "Next": "TransformResults"
+    },
+    "TransformResults": {
+      "Type": "Pass",
+      "Parameters": {
+        "agentResults": [
+          {
+            "agentName.$": "$.agentResults[0].buildResult.Payload.agentName",
+            "status.$": "$.agentResults[0].buildResult.Payload.status",
+            "analysis.$": "$.agentResults[0].buildResult.Payload.analysis",
+            "timestamp.$": "$.agentResults[0].buildResult.Payload.timestamp",
+            "metadata.$": "$.agentResults[0].buildResult.Payload.metadata"
+          },
+          {
+            "agentName.$": "$.agentResults[1].combatResult.Payload.agentName",
+            "status.$": "$.agentResults[1].combatResult.Payload.status",
+            "analysis.$": "$.agentResults[1].combatResult.Payload.analysis",
+            "timestamp.$": "$.agentResults[1].combatResult.Payload.timestamp",
+            "metadata.$": "$.agentResults[1].combatResult.Payload.metadata"
+          },
+          {
+            "agentName.$": "$.agentResults[2].visionResult.Payload.agentName",
+            "status.$": "$.agentResults[2].visionResult.Payload.status",
+            "analysis.$": "$.agentResults[2].visionResult.Payload.analysis",
+            "timestamp.$": "$.agentResults[2].visionResult.Payload.timestamp",
+            "metadata.$": "$.agentResults[2].visionResult.Payload.metadata"
+          },
+          {
+            "agentName.$": "$.agentResults[3].economyResult.Payload.agentName",
+            "status.$": "$.agentResults[3].economyResult.Payload.status",
+            "analysis.$": "$.agentResults[3].economyResult.Payload.analysis",
+            "timestamp.$": "$.agentResults[3].economyResult.Payload.timestamp",
+            "metadata.$": "$.agentResults[3].economyResult.Payload.metadata"
+          },
+          {
+            "agentName.$": "$.agentResults[4].championResult.Payload.agentName",
+            "status.$": "$.agentResults[4].championResult.Payload.status",
+            "analysis.$": "$.agentResults[4].championResult.Payload.analysis",
+            "timestamp.$": "$.agentResults[4].championResult.Payload.timestamp",
+            "metadata.$": "$.agentResults[4].championResult.Payload.metadata"
+          },
+          {
+            "agentName.$": "$.agentResults[5].competitiveResult.Payload.agentName",
+            "status.$": "$.agentResults[5].competitiveResult.Payload.status",
+            "analysis.$": "$.agentResults[5].competitiveResult.Payload.analysis",
+            "timestamp.$": "$.agentResults[5].competitiveResult.Payload.timestamp",
+            "metadata.$": "$.agentResults[5].competitiveResult.Payload.metadata"
+          }
+        ],
+        "sessionId.$": "$.detail.sessionId",
+        "matchId.$": "$.detail.matchId",
+        "puuid.$": "$.detail.puuid"
+      },
+      "ResultPath": "$",
       "Next": "Synthesizer"
     },
     "Synthesizer": {
@@ -262,9 +370,9 @@
         "FunctionName": "${SynthesizerFunctionArn}",
         "Payload": {
           "agentResults.$": "$.agentResults",
-          "sessionId.$": "$.detail.sessionId",
-          "matchId.$": "$.detail.matchId",
-          "puuid.$": "$.detail.puuid"
+          "sessionId.$": "$.sessionId",
+          "matchId.$": "$.matchId",
+          "puuid.$": "$.puuid"
         }
       },
       "Retry": [

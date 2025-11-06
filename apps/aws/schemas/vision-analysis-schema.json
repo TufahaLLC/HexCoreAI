@@ -1,0 +1,116 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Vision Analysis Tools API",
+    "version": "1.0.0",
+    "description": "Tools for analyzing vision control, ward placement, and map awareness"
+  },
+  "paths": {
+    "/getMatchVisionData": {
+      "post": {
+        "summary": "Get Match Vision Data",
+        "description": "Retrieve vision control statistics for a specific match",
+        "operationId": "getMatchVisionData",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "matchId": {
+                    "type": "string",
+                    "description": "The match ID"
+                  },
+                  "puuid": {
+                    "type": "string",
+                    "description": "The player UUID"
+                  }
+                },
+                "required": ["matchId", "puuid"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "wardsPlaced": { "type": "number" },
+                    "wardsDestroyed": { "type": "number" },
+                    "visionScore": { "type": "number" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/analyzeVisionScore": {
+      "post": {
+        "summary": "Analyze Vision Score",
+        "description": "Analyze ward placement efficiency and vision control",
+        "operationId": "analyzeVisionScore",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "wardsPlaced": {
+                    "type": "number",
+                    "description": "Number of wards placed"
+                  },
+                  "wardsDestroyed": {
+                    "type": "number",
+                    "description": "Number of wards destroyed"
+                  },
+                  "visionScore": {
+                    "type": "number",
+                    "description": "Vision score"
+                  },
+                  "gameDuration": {
+                    "type": "number",
+                    "description": "Game duration in seconds"
+                  }
+                },
+                "required": [
+                  "wardsPlaced",
+                  "wardsDestroyed",
+                  "visionScore",
+                  "gameDuration"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "visionMetrics": { "type": "object" },
+                    "rating": { "type": "string" },
+                    "recommendations": {
+                      "type": "array",
+                      "items": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

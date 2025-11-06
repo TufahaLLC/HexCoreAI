@@ -1,6 +1,6 @@
 # Task 11.5: Updated Riot API Client Module
 
-**Status:** 🔄 Pending
+**Status:** 🔄 In Progress
 
 ## Overview
 
@@ -14,18 +14,27 @@ Extend the Riot API client layer with third-party integrations, caching, normali
 
 **Implementation Subtasks:**
 
-- [ ] Create `ExternalAPIClient` class with rate limiting and caching
-- [ ] Implement Community Dragon fetchers (champion data, items, runes)
-- [ ] Implement Data Dragon version-aware fetchers
-- [ ] Implement U.GG scraper with Cheerio/Puppeteer
+- [x] Create `ExternalAPIClient` class with rate limiting and caching
+- [x] Add caching layer with DynamoDB for external data (24hr TTL)
+- [x] Add provenance tracking (source, timestamp, version)
+- [x] Implement placeholder methods for U.GG data fetching
+- [x] Implement Community Dragon fetchers (champion data, items, runes)
+- [x] Implement Data Dragon version-aware fetchers
+- [x] Add timeline extraction functions to riot-api.ts
+- [x] Update temporal-tools with real data retrieval
+- [x] Update macro-tools with external API integration
+- [x] Update positioning-tools with heat map generation
+- [x] Update synergy-tools with team composition analysis
+- [x] Update adaptation-tools with build adaptation analysis
+- [x] Implement data normalization functions for cross-source consistency
+- [x] Implement conflict resolution (multiple sources for same metric)
+- [x] Add data freshness scoring and metric aggregation
+- [x] Add circuit breaker pattern for failed external APIs
+- [x] Implement retry logic with exponential backoff
+- [x] Integrate resilience patterns into API methods
+- [ ] Implement U.GG scraper with Cheerio/Puppeteer (currently placeholder)
 - [ ] Implement OP.GG scraper with anti-bot detection
 - [ ] Implement LoLalytics scraper with rate limit handling
-- [ ] Add caching layer with Redis/DynamoDB for external data (24hr TTL)
-- [ ] Implement data normalization functions for cross-source consistency
-- [ ] Add provenance tracking (source, timestamp, version)
-- [ ] Implement conflict resolution (multiple sources for same metric)
-- [ ] Add circuit breaker pattern for failed external APIs
-- [ ] Implement retry logic with exponential backoff
 
 ```ts
 import axios, { AxiosInstance } from 'axios';

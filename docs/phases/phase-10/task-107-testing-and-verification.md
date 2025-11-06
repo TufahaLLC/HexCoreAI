@@ -4,10 +4,10 @@ Run the web app, connect to the WebSocket backend, and verify real-time updates.
 
 ## Subtasks
 
-- [ ] Ensure dependencies installed (Task 10.1)
-- [ ] Ensure provider integrated (Task 10.3)
-- [ ] Ensure env configured (Task 10.5)
-- [ ] Render the dashboard on a page
+- [x] Ensure dependencies installed (Task 10.1)
+- [x] Ensure provider integrated (Task 10.3)
+- [x] Ensure env configured (Task 10.5)
+- [x] Render the dashboard on a page
 
 ## Optional route for demo
 
@@ -60,6 +60,7 @@ Open `http://localhost:3001/analysis` (or your configured port) and:
 
 ## Completion Criteria
 
-- [ ] Client connects and receives the initial `started` message
-- [ ] Real-time progress updates arrive during processing
-- [ ] Final `completed` message includes `synthesis` payload and is rendered
+- [x] Build completes successfully with analysis page
+- [ ] Client connects and receives the initial `started` message (requires backend deployment)
+- [ ] Real-time progress updates arrive during processing (requires backend deployment)
+- [ ] Final `completed` message includes `synthesis` payload and is rendered (requires backend deployment)

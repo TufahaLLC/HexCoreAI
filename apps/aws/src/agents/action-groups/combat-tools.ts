@@ -17,7 +17,9 @@ const tracer = new Tracer({ serviceName: "hexcore-combat-tools" });
 const app = new BedrockAgentFunctionResolver({ logger });
 
 const ddbClient = new DynamoDBClient({});
-const ddb = DynamoDBDocumentClient.from(ddbClient);
+const ddb = DynamoDBDocumentClient.from(ddbClient, {
+  marshallOptions: { removeUndefinedValues: true },
+});
 
 /**
  * Tool: Get Match Combat Data
@@ -32,7 +34,7 @@ app.tool<{ matchId: string; puuid: string }>(
       const result = await ddb.send(
         new GetCommand({
           TableName: process.env.MATCH_DATA_TABLE,
-          Key: { dataKey: `${matchId}#${puuid}` },
+          Key: { dataKey: `match:${matchId}:puuid:${puuid}` },
         })
       );
 
@@ -95,12 +97,18 @@ app.tool<{
   damageReceivedJson: string;
 }>(
   async ({ damageDealtJson, damageReceivedJson }) => {
-    const damageDealt = JSON.parse(
-      damageDealtJson
-    ) as { physical: number; magic: number; true: number; total: number };
-    const damageReceived = JSON.parse(
-      damageReceivedJson
-    ) as { physical: number; magic: number; true: number; total: number };
+    const damageDealt = JSON.parse(damageDealtJson) as {
+      physical: number;
+      magic: number;
+      true: number;
+      total: number;
+    };
+    const damageReceived = JSON.parse(damageReceivedJson) as {
+      physical: number;
+      magic: number;
+      true: number;
+      total: number;
+    };
     logger.info("Analyzing damage output", {
       totalDealt: damageDealt.total,
       totalReceived: damageReceived.total,
@@ -114,15 +122,15 @@ app.tool<{
       const damageBreakdown = {
         physical:
           totalDealt > 0
-            ? ((damageDealt.physical / totalDealt) * 100).toFixed(1) + "%"
+            ? `${((damageDealt.physical / totalDealt) * 100).toFixed(1)}%`
             : "0%",
         magic:
           totalDealt > 0
-            ? ((damageDealt.magic / totalDealt) * 100).toFixed(1) + "%"
+            ? `${((damageDealt.magic / totalDealt) * 100).toFixed(1)}%`
             : "0%",
         true_damage:
           totalDealt > 0
-            ? ((damageDealt.true / totalDealt) * 100).toFixed(1) + "%"
+            ? `${((damageDealt.true / totalDealt) * 100).toFixed(1)}%`
             : "0%",
       };
 
@@ -147,14 +155,13 @@ app.tool<{
         );
       }
 
-      if (totalDealt < 15000) {
+      if (totalDealt < 15_000) {
         recommendations.push(
           "Low total damage output. Look for more opportunities to contribute damage in fights"
         );
       }
 
-      const physicalPercent =
-        (damageDealt.physical / totalDealt) * 100;
+      const physicalPercent = (damageDealt.physical / totalDealt) * 100;
       const magicPercent = (damageDealt.magic / totalDealt) * 100;
 
       if (physicalPercent > 70) {
@@ -211,17 +218,21 @@ app.tool<{
   kills: number;
   deaths: number;
   assists: number;
-  killParticipation: number;
+  teamKills: number;
 }>(
-  async ({ kills, deaths, assists, killParticipation }) => {
+  async ({ kills, deaths, assists, teamKills }) => {
     logger.info("Evaluating teamfight performance", {
       kills,
       deaths,
       assists,
-      killParticipation,
+      teamKills,
     });
 
     try {
+      // Calculate kill participation
+      const killParticipation =
+        teamKills > 0 ? ((kills + assists) / teamKills) * 100 : 0;
+
       // Calculate KDA ratio
       const kdaRatio =
         deaths > 0 ? (kills + assists) / deaths : kills + assists;
@@ -300,8 +311,8 @@ app.tool<{
 
       const result = {
         performance: {
-          kdaRatio: parseFloat(kdaRatio.toFixed(2)),
-          killParticipation: killParticipation.toFixed(1) + "%",
+          kdaRatio: Number.parseFloat(kdaRatio.toFixed(2)),
+          killParticipation: `${killParticipation.toFixed(1)}%`,
           rating,
         },
         strengths,
@@ -321,8 +332,278 @@ app.tool<{
     }
   },
   {
-    name: "evaluateTeamfightPerformance",
-    description: "Evaluate player performance in teamfights based on KDA",
+    name: "evaluateTeamfightParticipation",
+    description: "Evaluate teamfight participation and impact",
+  }
+);
+
+/**
+ * Tool: Get Combat Benchmarks
+ *
+ * Retrieves combat performance benchmarks from meta sources based on role and rank.
+ * TODO: Integrate with U.GG/LoLalytics API once implemented in Task 11.5
+ */
+app.tool<{ role: string; rank: string }>(
+  async ({ role, rank }) => {
+    logger.info("Fetching combat benchmarks", { role, rank });
+
+    try {
+      // TODO: Replace with actual external API call
+      // const benchmarks = await externalAPIClient.getCombatBenchmarksFromUGG(role, rank);
+
+      const result = {
+        role,
+        rank,
+        benchmarks: {
+          kda: { excellent: 4.0, good: 3.0, average: 2.0, poor: 1.5 },
+          killParticipation: { excellent: 70, good: 60, average: 50, poor: 40 },
+          damagePerMinute: {
+            excellent: 800,
+            good: 650,
+            average: 500,
+            poor: 350,
+          },
+          damageShare: { excellent: 30, good: 25, average: 20, poor: 15 },
+        },
+        percentileRankings: {
+          top10: { kda: 5.2, killParticipation: 75, dpm: 950 },
+          top25: { kda: 4.0, killParticipation: 68, dpm: 750 },
+          top50: { kda: 3.0, killParticipation: 58, dpm: 600 },
+        },
+        note: "TODO: Integration with U.GG/LoLalytics API pending (Task 11.5)",
+      };
+
+      tracer.putMetadata("combatBenchmarks", result);
+      logger.info("Combat benchmarks retrieved", { role, rank });
+
+      return result;
+    } catch (error) {
+      logger.error("Error fetching combat benchmarks", { error, role, rank });
+      throw error;
+    }
+  },
+  {
+    name: "getCombatBenchmarks",
+    description:
+      "Retrieve combat performance benchmarks for KDA, damage, and kill participation by role and rank",
+  }
+);
+
+/**
+ * Tool: Analyze Teamfight Positioning
+ *
+ * Analyzes teamfight positioning patterns based on combat events.
+ * TODO: Integrate with LoLalytics/Mobalytics API once implemented in Task 11.5
+ */
+app.tool<{ eventsJson: string; role: string }>(
+  async ({ eventsJson, role }) => {
+    const events = JSON.parse(eventsJson) as Array<{
+      type: string;
+      timestamp: number;
+      position: { x: number; y: number };
+    }>;
+    logger.info("Analyzing teamfight positioning", {
+      role,
+      eventCount: events.length,
+    });
+
+    try {
+      // TODO: Replace with actual external API call for positioning heatmaps
+      // const positioningData = await externalAPIClient.getPositioningDataFromLoLalytics(role);
+
+      // Analyze positioning safety
+      const teamfightEvents = events.filter((e) => e.type === "teamfight");
+      const avgPosition =
+        teamfightEvents.length > 0
+          ? {
+              x:
+                teamfightEvents.reduce((sum, e) => sum + e.position.x, 0) /
+                teamfightEvents.length,
+              y:
+                teamfightEvents.reduce((sum, e) => sum + e.position.y, 0) /
+                teamfightEvents.length,
+            }
+          : { x: 0, y: 0 };
+
+      const result = {
+        role,
+        totalTeamfights: teamfightEvents.length,
+        averagePosition: avgPosition,
+        positioningRating: "Good", // Placeholder
+        recommendations: [
+          role === "BOTTOM" || role === "MIDDLE"
+            ? "Maintain backline positioning - stay behind frontline tanks"
+            : "Engage from flanks or frontline based on team composition",
+          "Watch for enemy assassins and maintain escape routes",
+          "Position near objectives during contested fights",
+        ],
+        commonMistakes: [
+          "Over-extending without vision of enemy team",
+          "Face-checking brushes during objective setups",
+          "Poor spacing allowing multi-target enemy abilities",
+        ],
+        note: "TODO: Integration with LoLalytics/Mobalytics API pending (Task 11.5)",
+      };
+
+      tracer.putMetadata("teamfightPositioning", result);
+      logger.info("Teamfight positioning analysis completed", {
+        teamfights: teamfightEvents.length,
+      });
+
+      return result;
+    } catch (error) {
+      logger.error("Error analyzing teamfight positioning", { error, role });
+      throw error;
+    }
+  },
+  {
+    name: "analyzeTeamfightPositioning",
+    description:
+      "Analyze teamfight positioning patterns and provide role-specific recommendations",
+  }
+);
+
+/**
+ * Tool: Get Damage Prioritization Analysis
+ *
+ * Analyzes damage target prioritization in teamfights.
+ * TODO: Integrate with LoLalytics API once implemented in Task 11.5
+ */
+app.tool<{ targetsJson: string; role: string }>(
+  async ({ targetsJson, role }) => {
+    const targets = JSON.parse(targetsJson) as Array<{
+      championName: string;
+      damageDealt: number;
+      role: string;
+    }>;
+    logger.info("Analyzing damage prioritization", {
+      role,
+      targetCount: targets.length,
+    });
+
+    try {
+      // TODO: Replace with actual external API call
+      // const prioritizationData = await externalAPIClient.getDamagePrioritizationFromLoLalytics(role);
+
+      // Analyze target priority
+      const totalDamage = targets.reduce((sum, t) => sum + t.damageDealt, 0);
+      const targetAnalysis = targets.map((t) => ({
+        champion: t.championName,
+        role: t.role,
+        damageDealt: t.damageDealt,
+        damageShare: `${((t.damageDealt / totalDamage) * 100).toFixed(1)}%`,
+        priority:
+          t.role === "BOTTOM" || t.role === "MIDDLE"
+            ? "High"
+            : t.role === "UTILITY"
+              ? "Low"
+              : "Medium",
+      }));
+
+      const result = {
+        role,
+        targetAnalysis,
+        prioritizationScore: 7.5, // Placeholder
+        recommendations: [
+          "Prioritize enemy carries (ADC/Mid) when safely accessible",
+          "Focus frontline tanks only when carries are protected",
+          "Avoid tunnel vision - switch targets based on positioning",
+        ],
+        optimalTargetPriority: [
+          "1. Out-of-position carries",
+          "2. Low-health high-value targets",
+          "3. Nearest accessible enemy",
+          "4. Frontline tanks (if no better option)",
+        ],
+        note: "TODO: Integration with LoLalytics API pending (Task 11.5)",
+      };
+
+      tracer.putMetadata("damagePrioritization", result);
+      logger.info("Damage prioritization analysis completed", {
+        targets: targets.length,
+      });
+
+      return result;
+    } catch (error) {
+      logger.error("Error analyzing damage prioritization", { error, role });
+      throw error;
+    }
+  },
+  {
+    name: "getDamagePriorizationAnalysis",
+    description:
+      "Analyze damage target prioritization and provide optimal targeting recommendations",
+  }
+);
+
+/**
+ * Tool: Get Engagement Timing Benchmarks
+ *
+ * Retrieves optimal engagement timing data from meta sources.
+ * TODO: Integrate with Mobalytics API once implemented in Task 11.5
+ */
+app.tool<{ role: string; rank: string }>(
+  async ({ role, rank }) => {
+    logger.info("Fetching engagement timing benchmarks", { role, rank });
+
+    try {
+      // TODO: Replace with actual external API call
+      // const timingData = await externalAPIClient.getEngagementTimingsFromMobalytics(role, rank);
+
+      const result = {
+        role,
+        rank,
+        optimalEngagementWindows: [
+          {
+            condition: "Enemy abilities on cooldown",
+            priority: "High",
+            successRate: "68%",
+          },
+          {
+            condition: "Number advantage (5v4 or better)",
+            priority: "High",
+            successRate: "72%",
+          },
+          {
+            condition: "Level/item power spike",
+            priority: "Medium",
+            successRate: "58%",
+          },
+          {
+            condition: "Objective spawning soon",
+            priority: "Medium",
+            successRate: "55%",
+          },
+        ],
+        poorEngagementConditions: [
+          { condition: "Vision disadvantage", avoidanceRate: "85%" },
+          { condition: "Number disadvantage", avoidanceRate: "90%" },
+          { condition: "Low health/mana", avoidanceRate: "80%" },
+        ],
+        roleSpecificTiming:
+          role === "JUNGLE" || role === "UTILITY"
+            ? "Engage when team is positioned and ready to follow up"
+            : "Wait for engage from frontline before committing damage",
+        note: "TODO: Integration with Mobalytics API pending (Task 11.5)",
+      };
+
+      tracer.putMetadata("engagementTimingBenchmarks", result);
+      logger.info("Engagement timing benchmarks retrieved", { role, rank });
+
+      return result;
+    } catch (error) {
+      logger.error("Error fetching engagement timing benchmarks", {
+        error,
+        role,
+        rank,
+      });
+      throw error;
+    }
+  },
+  {
+    name: "getEngagementTimingBenchmarks",
+    description:
+      "Retrieve optimal engagement timing data and success rates by role and rank",
   }
 );
 

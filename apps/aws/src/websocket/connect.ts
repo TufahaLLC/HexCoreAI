@@ -6,8 +6,10 @@ import { SendMessageCommand, SQSClient } from "@aws-sdk/client-sqs";
 import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
 import type { APIGatewayProxyWebsocketHandlerV2 } from "aws-lambda";
 import { ZodError } from "zod";
+import { findCachedAnalysis } from "../shared/cache";
 import {
   MILLISECONDS_TO_SECONDS,
+  QUEUE_RANKED_SOLO_DUO,
   RADIX_DECIMAL,
   TWO_HOURS_IN_SECONDS,
   YEAR_END_DAY,
@@ -15,7 +17,6 @@ import {
   YEAR_START_DAY,
   YEAR_START_MONTH,
 } from "../shared/constants";
-import { findCachedAnalysis } from "../shared/cache";
 import { getMatchIds } from "../shared/riot-api";
 import {
   type ConnectionParams,
@@ -25,7 +26,9 @@ import type { SQSMatchMessage } from "../shared/types";
 import { sendWebSocketUpdate } from "../shared/websocket-client";
 
 const ddbClient = new DynamoDBClient({});
-const ddb = DynamoDBDocumentClient.from(ddbClient);
+const ddb = DynamoDBDocumentClient.from(ddbClient, {
+  marshallOptions: { removeUndefinedValues: true },
+});
 const sqs = new SQSClient({});
 const logger = new Logger({ serviceName: "WebSocketConnect" });
 
@@ -39,10 +42,11 @@ const enqueueMatchesIdempotent = makeIdempotent(
   async (params: ConnectionParams) => {
     const { sessionId, puuid, region, year } = params;
 
-    logger.info("Fetching match IDs", {
+    logger.info("Fetching Ranked Solo/Duo match IDs", {
       puuid,
       region,
       year,
+      queue: QUEUE_RANKED_SOLO_DUO,
       correlationId: sessionId,
     });
 
@@ -63,6 +67,7 @@ const enqueueMatchesIdempotent = makeIdempotent(
       puuid,
       startTime: yearStart,
       endTime: yearEnd,
+      queue: QUEUE_RANKED_SOLO_DUO, // Filter for Ranked Solo/Duo games only
     });
 
     logger.info("Fetched match IDs from Riot API", {

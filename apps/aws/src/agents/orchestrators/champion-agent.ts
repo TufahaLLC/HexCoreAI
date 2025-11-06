@@ -5,27 +5,27 @@
  * Progress range: 75-85%
  */
 
-import type { Handler } from "aws-lambda";
 import { Logger } from "@aws-lambda-powertools/logger";
-import { Tracer } from "@aws-lambda-powertools/tracer";
+import type { Handler } from "aws-lambda";
 import { ZodError } from "zod";
-import { sendWebSocketUpdate } from "../../shared/websocket-client";
 import {
-  invokeBedrockAgentWithTracing,
   formatAgentInput,
+  invokeBedrockAgentWithTracing,
+  resolveAgentEnvironment,
 } from "../../shared/bedrock-client";
 import {
-  registerSession,
+  type AgentOrchestratorInput,
+  agentOrchestratorInputSchema,
+} from "../../shared/schemas";
+import {
   completeSession,
   failSession,
   generateSessionId,
+  registerSession,
 } from "../../shared/session-manager";
-import {
-  agentOrchestratorInputSchema,
-  type AgentOrchestratorInput,
-} from "../../shared/schemas";
+import { sendWebSocketUpdate } from "../../shared/websocket-client";
 
-interface ChampionAgentOutput {
+type ChampionAgentOutput = {
   agentName: string;
   status: "success" | "failed";
   analysis: string;
@@ -35,10 +35,9 @@ interface ChampionAgentOutput {
     executionTimeMs?: number;
     toolInvocations?: number;
   };
-}
+};
 
 const logger = new Logger({ serviceName: "ChampionAgentOrchestrator" });
-const tracer = new Tracer({ serviceName: "ChampionAgentOrchestrator" });
 
 /**
  * Main handler for Champion Agent orchestration
@@ -85,7 +84,10 @@ async function invokeChampionAgent(
 ): Promise<ChampionAgentOutput> {
   const { sessionId, matchId, puuid } = input;
   let toolInvocationCount = 0;
-  let currentProgress = 75;
+  const currentProgress = 75;
+  const { agentId, agentAliasId } = resolveAgentEnvironment("champion", {
+    agentLabel: "ChampionAgent",
+  });
 
   // Generate isolated session ID for this agent
   const agentSessionId = generateSessionId("ChampionAgent", matchId);
@@ -109,8 +111,8 @@ async function invokeChampionAgent(
 
     // Invoke agent with enhanced trace handling
     const result = await invokeBedrockAgentWithTracing({
-      agentId: process.env.CHAMPION_AGENT_ID!,
-      agentAliasId: process.env.CHAMPION_AGENT_ALIAS_ID!,
+      agentId,
+      agentAliasId,
       sessionId: agentSessionId,
       inputText: formatAgentInput({
         analysisType: "champion performance",

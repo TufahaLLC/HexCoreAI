@@ -43,6 +43,11 @@ export type RiotMatchResponse = {
     gameDuration: number;
     gameEndTimestamp: number;
     gameId: number;
+    gameMode: string;
+    gameType: string;
+    queueId: number;
+    gameVersion: string;
+    platformId: string;
     participants: RiotParticipant[];
   };
 };
@@ -52,6 +57,12 @@ export type RiotParticipant = {
   participantId: number;
   championName: string;
   teamPosition: string;
+  teamId: number;
+  win: boolean;
+  summonerName?: string | null;
+  riotIdGameName?: string | null;
+  champLevel: number;
+  championId: number;
   kills: number;
   deaths: number;
   assists: number;
@@ -69,6 +80,13 @@ export type RiotParticipant = {
   wardsPlaced: number;
   wardsKilled: number;
   visionScore: number;
+  visionWardsBoughtInGame?: number;
+  largestKillingSpree: number;
+  largestMultiKill: number;
+  doubleKills: number;
+  tripleKills: number;
+  quadraKills: number;
+  pentaKills: number;
   physicalDamageDealtToChampions: number;
   magicDamageDealtToChampions: number;
   trueDamageDealtToChampions: number;
@@ -77,6 +95,32 @@ export type RiotParticipant = {
   magicDamageTaken: number;
   trueDamageTaken: number;
   totalDamageTaken: number;
+};
+
+export type RiotSummonerResponse = {
+  id: string;
+  accountId: string;
+  puuid: string;
+  name: string;
+  profileIconId: number;
+  revisionDate: number;
+  summonerLevel: number;
+};
+
+export type RiotLeagueEntry = {
+  leagueId: string;
+  queueType: string;
+  tier: string;
+  rank: string;
+  summonerId: string;
+  summonerName: string;
+  leaguePoints: number;
+  wins: number;
+  losses: number;
+  hotStreak: boolean;
+  veteran: boolean;
+  freshBlood: boolean;
+  inactive: boolean;
 };
 
 export type RiotTimelineResponse = {
@@ -101,6 +145,16 @@ export type ParticipantFrame = {
   totalGold: number;
   level: number;
   currentGold: number;
+  minionsKilled?: number;
+  jungleMinionsKilled?: number;
+  position?: {
+    x: number;
+    y: number;
+  };
+  damageStats?: {
+    totalDamageDoneToChampions?: number;
+    totalDamageTaken?: number;
+  };
 };
 
 export type TimelineEvent = {
@@ -109,6 +163,11 @@ export type TimelineEvent = {
   participantId?: number;
   itemId?: number;
   cost?: number;
+  teamId?: number;
+  killerTeamId?: number;
+  killerId?: number;
+  monsterType?: string;
+  buildingType?: string;
 };
 
 // ============================================================================
@@ -120,11 +179,15 @@ export type MatchData = {
   dataKey: string;
   matchId: string;
   puuid: string;
+  gameInfo?: GameInfoData;
+  playerInfo?: PlayerInfoData;
   build?: BuildData;
   combat?: CombatData;
   vision?: VisionData;
   economy?: EconomyData;
   championMeta?: ChampionMetaData;
+  teamComposition?: TeamCompositionData;
+  rankInfo?: RankInfoData;
   expiresAt: number;
 };
 
@@ -140,30 +203,81 @@ export type ItemPurchase = {
   cost: number;
 };
 
+export type GameInfoData = {
+  gameDuration: number;
+  gameDurationMinutes: number;
+  gameMode: string;
+  gameType: string;
+  queueId: number;
+  gameVersion: string;
+  platformId: string;
+};
+
+export type PlayerInfoData = {
+  participantId: number;
+  teamId: number;
+  win: boolean;
+  summonerName?: string | null;
+  championLevel: number;
+};
+
 export type CombatData = {
   kills: number;
   deaths: number;
   assists: number;
   damageDealt: Record<string, number>;
   damageReceived: Record<string, number>;
+  largestKillingSpree: number;
+  largestMultiKill: number;
+  doubleKills: number;
+  tripleKills: number;
+  quadraKills: number;
+  pentaKills: number;
 };
 
 export type VisionData = {
   wardsPlaced: number;
   wardsDestroyed: number;
   visionScore: number;
+  visionScorePerMinute: number;
+  controlWardsBought: number;
 };
 
 export type EconomyData = {
   totalGold: number;
+  goldSpent: number;
   csPerMinute: number;
   goldEfficiency: number;
+  goldPerMinute: number;
+  totalMinionsKilled: number;
+  neutralMinionsKilled: number;
+  csAtEnd: number;
 };
 
 export type ChampionMetaData = {
   champion: string;
+  championId: number;
   role: string;
   tier: string;
+  winRate: number;
+};
+
+export type TeamCompositionData = {
+  allies: TeamMemberData[];
+  enemies: TeamMemberData[];
+};
+
+export type TeamMemberData = {
+  championName: string;
+  role: string;
+};
+
+export type RankInfoData = {
+  tier: string;
+  rank: string;
+  leaguePoints: number;
+  wins: number;
+  losses: number;
   winRate: number;
 };
 
@@ -191,7 +305,12 @@ export type AgentResult = {
     | VisionAnalysisResult
     | EconomyAnalysisResult
     | ChampionAnalysisResult
-    | CompetitiveAnalysisResult;
+    | CompetitiveAnalysisResult
+    | MacroAnalysisResult
+    | PositioningAnalysisResult
+    | TemporalAnalysisResult
+    | SynergyAnalysisResult
+    | AdaptationAnalysisResult;
   timestamp: number;
   metadata?: {
     tokensUsed?: number;
@@ -261,6 +380,47 @@ export type CompetitiveAnalysisResult = {
   recommendations: string[];
 };
 
+export type MacroAnalysisResult = {
+  roamingEfficiency: number;
+  objectiveControl: number;
+  mapPressureScore: number;
+  strategicDecisionQuality: number;
+  recommendations: string[];
+};
+
+export type PositioningAnalysisResult = {
+  lanePositioningScore: number;
+  teamfightPositioningScore: number;
+  riskScore: number;
+  safetyScore: number;
+  recommendations: string[];
+};
+
+export type TemporalAnalysisResult = {
+  earlyGameScore: number;
+  midGameScore: number;
+  lateGameScore: number;
+  powerSpikeUtilization: number;
+  scalingEfficiency: number;
+  recommendations: string[];
+};
+
+export type SynergyAnalysisResult = {
+  teamSynergyScore: number;
+  championPairingScore: number;
+  coordinationScore: number;
+  duoSynergyScore: number;
+  recommendations: string[];
+};
+
+export type AdaptationAnalysisResult = {
+  buildAdaptationScore: number;
+  playstyleFlexibility: number;
+  strategicPivotingScore: number;
+  situationalAwareness: number;
+  recommendations: string[];
+};
+
 // ============================================================================
 // Type Aliases for Convenience
 // ============================================================================
@@ -272,4 +432,9 @@ export type AnyAgentAnalysisResult =
   | VisionAnalysisResult
   | EconomyAnalysisResult
   | ChampionAnalysisResult
-  | CompetitiveAnalysisResult;
+  | CompetitiveAnalysisResult
+  | MacroAnalysisResult
+  | PositioningAnalysisResult
+  | TemporalAnalysisResult
+  | SynergyAnalysisResult
+  | AdaptationAnalysisResult;

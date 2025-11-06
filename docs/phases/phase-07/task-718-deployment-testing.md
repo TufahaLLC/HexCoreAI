@@ -1,6 +1,6 @@
 # Task 7.18: Deploy & Test Bedrock Agents
 
-**Status**: ✅ Complete
+**Status**: 🚧 In Progress
 
 ## Overview
 
@@ -23,7 +23,7 @@ Before deployment, ensure all previous tasks are complete:
 
 ## Deployment Steps
 
-### Step 1: Install Dependencies
+### Step 1: Install Dependencies ✅
 
 ```bash
 # Navigate to aws app directory
@@ -37,7 +37,7 @@ pnpmlist @aws-sdk/client-bedrock-agent-runtime
 pnpmlist @aws-lambda-powertools/event-handler
 ```
 
-### Step 2: Build TypeScript
+### Step 2: Build TypeScript ✅
 
 ```bash
 # Clean previous builds
@@ -51,7 +51,7 @@ ls -la dist/agents/action-groups/
 ls -la dist/agents/orchestrators/
 ```
 
-### Step 3: Build SAM Application
+### Step 3: Build SAM Application 🚧
 
 ```bash
 # Build SAM application with dependencies
@@ -61,7 +61,7 @@ sam build
 ls -la .aws-sam/build/
 ```
 
-### Step 4: Deploy to AWS
+### Step 4: Deploy to AWS 🚧
 
 **First Deployment (Guided):**
 
@@ -83,25 +83,25 @@ sam deploy --guided
 sam deploy
 ```
 
-### Step 5: Capture Outputs
+### Step 5: Capture Outputs 🚧
 
 After deployment, save the CloudFormation outputs:
 
 ```bash
 # Get all stack outputs
 aws cloudformation describe-stacks \
-  --stack-name hexcore-ai \
+  --stack-name hexcore-ai-test \
   --query 'Stacks[0].Outputs' \
   --output table
 
 # Save specific agent IDs
 export BUILD_AGENT_ID=$(aws cloudformation describe-stacks \
-  --stack-name hexcore-ai \
+  --stack-name hexcore-ai-test \
   --query 'Stacks[0].Outputs[?OutputKey==`BuildAnalysisAgentId`].OutputValue' \
   --output text)
 
 export BUILD_AGENT_ALIAS_ID=$(aws cloudformation describe-stacks \
-  --stack-name hexcore-ai \
+  --stack-name hexcore-ai-test \
   --query 'Stacks[0].Outputs[?OutputKey==`BuildAnalysisAgentProdAliasId`].OutputValue' \
   --output text)
 ```
@@ -110,7 +110,7 @@ export BUILD_AGENT_ALIAS_ID=$(aws cloudformation describe-stacks \
 
 ## Testing
 
-### Test 1: Verify Bedrock Agents Created
+### Test 1: Verify Bedrock Agents Created 🚧
 
 ```bash
 # List all agents
@@ -129,7 +129,7 @@ aws bedrock-agent list-agent-aliases --agent-id $BUILD_AGENT_ID
 - Each agent has 2 aliases (prod, test)
 - Agent status: PREPARED or VERSIONED
 
-### Test 2: Test Action Group Lambda Functions
+### Test 2: Test Action Group Lambda Functions 🚧
 
 Create test event file: `test-events/build-action-group-test.json`
 
@@ -181,7 +181,7 @@ cat response.json | jq
 - [ ] DynamoDB query successful
 - [ ] Logging appears in CloudWatch
 
-### Test 3: Test Agent Invocation with Streaming
+### Test 3: Test Agent Invocation with Streaming 🚧
 
 ```bash
 # Test direct agent invocation
@@ -204,7 +204,7 @@ cat response-stream.txt
 - [ ] Tool invocations logged
 - [ ] Response is coherent and relevant
 
-### Test 4: Test Orchestrator Functions
+### Test 4: Test Orchestrator Functions 🚧 _(code updated to resolve shared agent environment fallbacks; deployment validation pending)_
 
 Create test event: `test-events/orchestrator-test.json`
 
@@ -241,7 +241,7 @@ cat orchestrator-response.json | jq
 - [ ] Tools invoked tracked
 - [ ] Final analysis returned
 
-### Test 5: End-to-End Analysis Flow
+### Test 5: End-to-End Analysis Flow 🚧
 
 **Trigger via WebSocket:**
 
@@ -267,7 +267,7 @@ wscat -c wss://YOUR_WEBSOCKET_API_ID.execute-api.us-east-1.amazonaws.com/prod
 - [ ] Final synthesis delivered
 - [ ] WebSocket closes gracefully
 
-### Test 6: Verify Session Management
+### Test 6: Verify Session Management 🚧
 
 ```bash
 # Query sessions for test user
@@ -524,3 +524,36 @@ After successful deployment:
 - [Phase 7 Update Guide](../../phase_7_update.md) - Lines 4498-4607
 - [AWS SAM Deployment Guide](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-deploying.html)
 - [Bedrock Agent Testing](https://docs.aws.amazon.com/bedrock/latest/userguide/agents-test.html)
+
+---
+
+## Issue Resolution Log
+
+### 2025-10-25: Step Functions ARN Substitution Fix
+
+**Problem:** All agent Lambda invocations failing with validation errors:
+
+```
+ValidationException: Value '${AgentOrchestratorArn}' at 'functionName' failed to satisfy constraint
+```
+
+**Root Cause:** Mismatch between `DefinitionSubstitutions` keys in `template.yaml` and placeholder names in `multi-agent-orchestration.asl.json`.
+
+**Solution:** Updated `template.yaml` lines 1074-1081 to use correct substitution keys:
+
+- Changed `BuildAgentFunctionArn` → `BuildAgentOrchestratorArn`
+- Changed `CombatAgentFunctionArn` → `CombatAgentOrchestratorArn`
+- Changed `VisionAgentFunctionArn` → `VisionAgentOrchestratorArn`
+- Changed `EconomyAgentFunctionArn` → `EconomyAgentOrchestratorArn`
+- Changed `ChampionAgentFunctionArn` → `ChampionAgentOrchestratorArn`
+- Changed `CompetitiveAgentFunctionArn` → `CompetitiveAgentOrchestratorArn`
+
+**Files Changed:**
+
+- `apps/aws/template.yaml` - Fixed DefinitionSubstitutions keys
+- `apps/aws/ARN_FIX_SUMMARY.md` - Detailed fix documentation
+- `apps/aws/redeploy-fix.ps1` - Deployment script
+
+**Deployment Required:** Yes - Run `sam deploy` to apply the fix.
+
+**Status:** ✅ Fixed - Ready for redeployment

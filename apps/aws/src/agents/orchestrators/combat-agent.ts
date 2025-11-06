@@ -5,27 +5,27 @@
  * Progress range: 35-50%
  */
 
-import type { Handler } from "aws-lambda";
 import { Logger } from "@aws-lambda-powertools/logger";
-import { Tracer } from "@aws-lambda-powertools/tracer";
+import type { Handler } from "aws-lambda";
 import { ZodError } from "zod";
-import { sendWebSocketUpdate } from "../../shared/websocket-client";
 import {
-  invokeBedrockAgentWithTracing,
   formatAgentInput,
+  invokeBedrockAgentWithTracing,
+  resolveAgentEnvironment,
 } from "../../shared/bedrock-client";
 import {
-  registerSession,
+  type AgentOrchestratorInput,
+  agentOrchestratorInputSchema,
+} from "../../shared/schemas";
+import {
   completeSession,
   failSession,
   generateSessionId,
+  registerSession,
 } from "../../shared/session-manager";
-import {
-  agentOrchestratorInputSchema,
-  type AgentOrchestratorInput,
-} from "../../shared/schemas";
+import { sendWebSocketUpdate } from "../../shared/websocket-client";
 
-interface CombatAgentOutput {
+type CombatAgentOutput = {
   agentName: string;
   status: "success" | "failed";
   analysis: string;
@@ -35,10 +35,9 @@ interface CombatAgentOutput {
     executionTimeMs?: number;
     toolInvocations?: number;
   };
-}
+};
 
 const logger = new Logger({ serviceName: "CombatAgentOrchestrator" });
-const tracer = new Tracer({ serviceName: "CombatAgentOrchestrator" });
 
 /**
  * Main handler for Combat Agent orchestration
@@ -85,7 +84,10 @@ async function invokeCombatAgent(
 ): Promise<CombatAgentOutput> {
   const { sessionId, matchId, puuid } = input;
   let toolInvocationCount = 0;
-  let currentProgress = 35;
+  const currentProgress = 35;
+  const { agentId, agentAliasId } = resolveAgentEnvironment("combat", {
+    agentLabel: "CombatAgent",
+  });
 
   // Generate isolated session ID for this agent
   const agentSessionId = generateSessionId("CombatAgent", matchId);
@@ -109,8 +111,8 @@ async function invokeCombatAgent(
 
     // Invoke agent with enhanced trace handling
     const result = await invokeBedrockAgentWithTracing({
-      agentId: process.env.COMBAT_AGENT_ID!,
-      agentAliasId: process.env.COMBAT_AGENT_ALIAS_ID!,
+      agentId,
+      agentAliasId,
       sessionId: agentSessionId,
       inputText: formatAgentInput({
         analysisType: "combat performance",

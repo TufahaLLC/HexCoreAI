@@ -4,8 +4,8 @@ Create a React Context that manages the WebSocket connection, lifecycle, reconne
 
 ## Subtasks
 
-- [ ] Create `apps/web/src/contexts/WebSocketContext.tsx`
-- [ ] Paste the implementation below
+- [x] Create `apps/web/src/contexts/WebSocketContext.tsx`
+- [x] Paste the implementation below
 - [ ] Ensure `NEXT_PUBLIC_WEBSOCKET_URL` is set (see Task 10.5)
 
 ## File: `apps/web/src/contexts/WebSocketContext.tsx`
@@ -258,8 +258,8 @@ export const getConnectionStatusLabel = (readyState: ReadyState): string => {
 
 ## Validation
 
-- [ ] TypeScript builds in `apps/web`
-- [ ] `useWebSocketContext()` available to client components
+- [x] TypeScript builds in `apps/web`
+- [x] `useWebSocketContext()` available to client components
 
 ## Next
 

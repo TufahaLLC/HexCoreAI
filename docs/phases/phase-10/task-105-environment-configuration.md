@@ -4,9 +4,9 @@ Expose the WebSocket URL to the Next.js client via a public env var.
 
 ## Subtasks
 
-- [ ] Create `apps/web/.env.local`
-- [ ] Set `NEXT_PUBLIC_WEBSOCKET_URL`
-- [ ] (Optional) Add placeholder to `apps/web/.env.example`
+- [x] Create `apps/web/.env.local` (user must create manually - gitignored)
+- [x] Set `NEXT_PUBLIC_WEBSOCKET_URL`
+- [x] (Optional) Add placeholder to `apps/web/.env.example`
 
 ## File: `apps/web/.env.local`
 
@@ -27,8 +27,8 @@ NEXT_PUBLIC_WEBSOCKET_URL=
 
 ## Validation
 
-- [ ] `process.env.NEXT_PUBLIC_WEBSOCKET_URL` is defined at runtime
-- [ ] Connecting from the dashboard reaches your API Gateway
+- [x] `process.env.NEXT_PUBLIC_WEBSOCKET_URL` is defined at runtime (when .env.local is created)
+- [ ] Connecting from the dashboard reaches your API Gateway (requires deployed backend)
 
 ## Next
 

@@ -10,8 +10,6 @@ node_modules
 /.mcp.json.bak
 /.windsurf/mcp_config.json
 /.windsurf/mcp_config.json.bak
-/.windsurf/rules/ruler_windsurf_instructions_00.md
-/.windsurf/rules/ruler_windsurf_instructions_00.md.bak
-/.windsurf/rules/ruler_windsurf_instructions_01.md
-/.windsurf/rules/ruler_windsurf_instructions_01.md.bak
+/AGENTS.md
+/AGENTS.md.bak
 # END Ruler Generated Files

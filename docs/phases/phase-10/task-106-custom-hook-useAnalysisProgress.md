@@ -4,8 +4,8 @@ Provide a convenience hook to derive per-agent progress and completion flags fro
 
 ## Subtasks
 
-- [ ] Create `apps/web/src/hooks/useAnalysisProgress.ts`
-- [ ] Paste the implementation below
+- [x] Create `apps/web/src/hooks/useAnalysisProgress.ts`
+- [x] Paste the implementation below
 
 ## File: `apps/web/src/hooks/useAnalysisProgress.ts`
 
@@ -49,8 +49,8 @@ export const useAnalysisProgress = () => {
 
 ## Validation
 
-- [ ] Hook returns per-agent progress map
-- [ ] Flags update based on the latest message
+- [x] Hook returns per-agent progress map
+- [x] Flags update based on the latest message
 
 ## Next
 

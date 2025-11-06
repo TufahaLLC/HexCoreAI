@@ -5,27 +5,27 @@
  * Progress range: 50-65%
  */
 
-import type { Handler } from "aws-lambda";
 import { Logger } from "@aws-lambda-powertools/logger";
-import { Tracer } from "@aws-lambda-powertools/tracer";
+import type { Handler } from "aws-lambda";
 import { ZodError } from "zod";
-import { sendWebSocketUpdate } from "../../shared/websocket-client";
 import {
-  invokeBedrockAgentWithTracing,
   formatAgentInput,
+  invokeBedrockAgentWithTracing,
+  resolveAgentEnvironment,
 } from "../../shared/bedrock-client";
 import {
-  registerSession,
+  type AgentOrchestratorInput,
+  agentOrchestratorInputSchema,
+} from "../../shared/schemas";
+import {
   completeSession,
   failSession,
   generateSessionId,
+  registerSession,
 } from "../../shared/session-manager";
-import {
-  agentOrchestratorInputSchema,
-  type AgentOrchestratorInput,
-} from "../../shared/schemas";
+import { sendWebSocketUpdate } from "../../shared/websocket-client";
 
-interface VisionAgentOutput {
+type VisionAgentOutput = {
   agentName: string;
   status: "success" | "failed";
   analysis: string;
@@ -35,10 +35,9 @@ interface VisionAgentOutput {
     executionTimeMs?: number;
     toolInvocations?: number;
   };
-}
+};
 
 const logger = new Logger({ serviceName: "VisionAgentOrchestrator" });
-const tracer = new Tracer({ serviceName: "VisionAgentOrchestrator" });
 
 /**
  * Main handler for Vision Agent orchestration
@@ -85,7 +84,10 @@ async function invokeVisionAgent(
 ): Promise<VisionAgentOutput> {
   const { sessionId, matchId, puuid } = input;
   let toolInvocationCount = 0;
-  let currentProgress = 50;
+  const currentProgress = 50;
+  const { agentId, agentAliasId } = resolveAgentEnvironment("vision", {
+    agentLabel: "VisionAgent",
+  });
 
   // Generate isolated session ID for this agent
   const agentSessionId = generateSessionId("VisionAgent", matchId);
@@ -109,8 +111,8 @@ async function invokeVisionAgent(
 
     // Invoke agent with enhanced trace handling
     const result = await invokeBedrockAgentWithTracing({
-      agentId: process.env.VISION_AGENT_ID!,
-      agentAliasId: process.env.VISION_AGENT_ALIAS_ID!,
+      agentId,
+      agentAliasId,
       sessionId: agentSessionId,
       inputText: formatAgentInput({
         analysisType: "vision control",

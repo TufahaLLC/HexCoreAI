@@ -5,27 +5,27 @@
  * Progress range: 65-75%
  */
 
-import type { Handler } from "aws-lambda";
 import { Logger } from "@aws-lambda-powertools/logger";
-import { Tracer } from "@aws-lambda-powertools/tracer";
+import type { Handler } from "aws-lambda";
 import { ZodError } from "zod";
-import { sendWebSocketUpdate } from "../../shared/websocket-client";
 import {
-  invokeBedrockAgentWithTracing,
   formatAgentInput,
+  invokeBedrockAgentWithTracing,
+  resolveAgentEnvironment,
 } from "../../shared/bedrock-client";
 import {
-  registerSession,
+  type AgentOrchestratorInput,
+  agentOrchestratorInputSchema,
+} from "../../shared/schemas";
+import {
   completeSession,
   failSession,
   generateSessionId,
+  registerSession,
 } from "../../shared/session-manager";
-import {
-  agentOrchestratorInputSchema,
-  type AgentOrchestratorInput,
-} from "../../shared/schemas";
+import { sendWebSocketUpdate } from "../../shared/websocket-client";
 
-interface EconomyAgentOutput {
+type EconomyAgentOutput = {
   agentName: string;
   status: "success" | "failed";
   analysis: string;
@@ -35,10 +35,9 @@ interface EconomyAgentOutput {
     executionTimeMs?: number;
     toolInvocations?: number;
   };
-}
+};
 
 const logger = new Logger({ serviceName: "EconomyAgentOrchestrator" });
-const tracer = new Tracer({ serviceName: "EconomyAgentOrchestrator" });
 
 /**
  * Main handler for Economy Agent orchestration
@@ -85,7 +84,10 @@ async function invokeEconomyAgent(
 ): Promise<EconomyAgentOutput> {
   const { sessionId, matchId, puuid } = input;
   let toolInvocationCount = 0;
-  let currentProgress = 65;
+  const currentProgress = 65;
+  const { agentId, agentAliasId } = resolveAgentEnvironment("economy", {
+    agentLabel: "EconomyAgent",
+  });
 
   // Generate isolated session ID for this agent
   const agentSessionId = generateSessionId("EconomyAgent", matchId);
@@ -109,8 +111,8 @@ async function invokeEconomyAgent(
 
     // Invoke agent with enhanced trace handling
     const result = await invokeBedrockAgentWithTracing({
-      agentId: process.env.ECONOMY_AGENT_ID!,
-      agentAliasId: process.env.ECONOMY_AGENT_ALIAS_ID!,
+      agentId,
+      agentAliasId,
       sessionId: agentSessionId,
       inputText: formatAgentInput({
         analysisType: "economy management",

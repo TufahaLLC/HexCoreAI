@@ -8,7 +8,9 @@ import {
 import type { APIGatewayProxyWebsocketHandlerV2 } from "aws-lambda";
 
 const ddbClient = new DynamoDBClient({});
-const ddb = DynamoDBDocumentClient.from(ddbClient);
+const ddb = DynamoDBDocumentClient.from(ddbClient, {
+  marshallOptions: { removeUndefinedValues: true },
+});
 const logger = new Logger({ serviceName: "WebSocketDisconnect" });
 
 export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event) => {

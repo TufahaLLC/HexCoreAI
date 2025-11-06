@@ -1,0 +1,159 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Economy Analysis Tools API",
+    "version": "1.0.0",
+    "description": "Tools for analyzing gold generation, CS efficiency, and resource management"
+  },
+  "paths": {
+    "/getMatchEconomyData": {
+      "post": {
+        "summary": "Get Match Economy Data",
+        "description": "Retrieve economic statistics for a specific match",
+        "operationId": "getMatchEconomyData",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "matchId": {
+                    "type": "string",
+                    "description": "The match ID"
+                  },
+                  "puuid": {
+                    "type": "string",
+                    "description": "The player UUID"
+                  }
+                },
+                "required": ["matchId", "puuid"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "totalGold": { "type": "number" },
+                    "csPerMinute": { "type": "number" },
+                    "goldEfficiency": { "type": "number" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/analyzeGoldEfficiency": {
+      "post": {
+        "summary": "Analyze Gold Efficiency",
+        "description": "Analyze gold generation, spending patterns, and resource optimization",
+        "operationId": "analyzeGoldEfficiency",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "totalGold": {
+                    "type": "number",
+                    "description": "Total gold earned"
+                  },
+                  "goldSpent": {
+                    "type": "number",
+                    "description": "Total gold spent"
+                  },
+                  "gameDuration": {
+                    "type": "number",
+                    "description": "Game duration in seconds"
+                  }
+                },
+                "required": ["totalGold", "goldSpent", "gameDuration"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "goldPerMinute": { "type": "number" },
+                    "goldEfficiency": { "type": "number" },
+                    "insights": {
+                      "type": "array",
+                      "items": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/compareFarmingEfficiency": {
+      "post": {
+        "summary": "Compare Farming Efficiency",
+        "description": "Compare CS and farming efficiency to role benchmarks",
+        "operationId": "compareFarmingEfficiency",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "csPerMinute": {
+                    "type": "number",
+                    "description": "CS per minute"
+                  },
+                  "role": {
+                    "type": "string",
+                    "description": "Player role"
+                  },
+                  "gameDuration": {
+                    "type": "number",
+                    "description": "Game duration in seconds"
+                  }
+                },
+                "required": ["csPerMinute", "role", "gameDuration"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "rating": { "type": "string" },
+                    "comparison": { "type": "object" },
+                    "recommendations": {
+                      "type": "array",
+                      "items": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

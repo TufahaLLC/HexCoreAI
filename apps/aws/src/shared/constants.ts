@@ -24,12 +24,24 @@ export const BACKOFF_BASE_MS = 1000;
 export const BACKOFF_MULTIPLIER = 2;
 export const BACKOFF_JITTER_RANGE_MS = 1000;
 
+// Riot API limits
+export const RIOT_MAX_MATCH_COUNT = 10;
+
+// Riot Queue IDs
+export const QUEUE_RANKED_SOLO_DUO = 420; // 5v5 Ranked Solo games
+
 // HTTP Status Codes
+export const RIOT_STATUS_UNAUTHORIZED = 401;
+export const RIOT_STATUS_FORBIDDEN = 403;
 export const RIOT_STATUS_TOO_MANY_REQUESTS = 429;
 export const RIOT_STATUS_SERVICE_UNAVAILABLE = 503;
 export const RATE_LIMIT_STATUS_CODES = new Set([
   RIOT_STATUS_TOO_MANY_REQUESTS,
   RIOT_STATUS_SERVICE_UNAVAILABLE,
+]);
+export const RIOT_UNAUTHORIZED_STATUS_CODES = new Set([
+  RIOT_STATUS_UNAUTHORIZED,
+  RIOT_STATUS_FORBIDDEN,
 ]);
 
 export const AGENT_NAMES = [
@@ -39,6 +51,11 @@ export const AGENT_NAMES = [
   "EconomyAgent",
   "ChampionAgent",
   "CompetitiveAgent",
+  "MacroAgent",
+  "PositioningAgent",
+  "TemporalAgent",
+  "SynergyAgent",
+  "AdaptationAgent",
   "Synthesizer",
 ] as const;
 

@@ -5,22 +5,24 @@
  * and enable session lifecycle management with automatic cleanup via TTL.
  */
 
+import { Logger } from "@aws-lambda-powertools/logger";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import {
+  DeleteCommand,
   DynamoDBDocumentClient,
+  GetCommand,
   PutCommand,
   UpdateCommand,
-  GetCommand,
-  DeleteCommand,
 } from "@aws-sdk/lib-dynamodb";
-import { Logger } from "@aws-lambda-powertools/logger";
 
 const logger = new Logger({ serviceName: "session-manager" });
 
 const client = new DynamoDBClient({
   region: process.env.AWS_REGION || "us-east-1",
 });
-const docClient = DynamoDBDocumentClient.from(client);
+const docClient = DynamoDBDocumentClient.from(client, {
+  marshallOptions: { removeUndefinedValues: true },
+});
 
 const SESSIONS_TABLE = process.env.AGENT_SESSIONS_TABLE || "AgentSessions";
 const SESSION_TTL_HOURS = 24;
@@ -33,7 +35,7 @@ export type SessionStatus = "active" | "completed" | "failed";
 /**
  * Agent session record stored in DynamoDB
  */
-export interface AgentSession {
+export type AgentSession = {
   sessionId: string;
   agentName: string;
   matchId: string;
@@ -49,7 +51,7 @@ export interface AgentSession {
     toolInvocations?: number;
     error?: string;
   };
-}
+};
 
 /**
  * Register a new agent session at the start of orchestration
@@ -205,7 +207,9 @@ export async function failSession(params: {
  * @param sessionId - Session identifier
  * @returns Session record or null if not found
  */
-export async function getSession(sessionId: string): Promise<AgentSession | null> {
+export async function getSession(
+  sessionId: string
+): Promise<AgentSession | null> {
   try {
     const result = await docClient.send(
       new GetCommand({

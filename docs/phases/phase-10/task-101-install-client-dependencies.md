@@ -4,9 +4,9 @@ Install packages required for the WebSocket client and dashboard.
 
 ## Subtasks
 
-- [ ] Add `react-use-websocket` to the web app
-- [ ] Add `uuid` for generating session IDs in the dashboard example
-- [ ] Verify TypeScript path alias `@/*` → `./src/*` (`apps/web/tsconfig.json`)
+- [x] Add `react-use-websocket` to the web app
+- [x] Add `uuid` for generating session IDs in the dashboard example
+- [x] Verify TypeScript path alias `@/*` → `./src/*` (`apps/web/tsconfig.json`)
 
 ## Commands
 
@@ -24,8 +24,8 @@ npm install react-use-websocket uuid
 
 ## Validation
 
-- [ ] `apps/web/package.json` lists `react-use-websocket` and `uuid` in dependencies
-- [ ] `pnpm -F web dev` (or `npm run dev`) compiles successfully
+- [x] `apps/web/package.json` lists `react-use-websocket` and `uuid` in dependencies
+- [x] `pnpm -F web dev` (or `npm run dev`) compiles successfully
 
 ## Next
 

@@ -17,13 +17,17 @@ import {
   filterMatchData,
   getMatchData,
   getMatchTimeline,
+  getSummonerByPuuid,
+  getSummonerRank,
 } from "../shared/riot-api";
 import { type SQSMatchMessage, sqsMatchMessageSchema } from "../shared/schemas";
 import type { EventBridgeMatchEvent } from "../shared/types";
 import { sendWebSocketUpdate } from "../shared/websocket-client";
 
 const ddbClient = new DynamoDBClient({});
-const ddb = DynamoDBDocumentClient.from(ddbClient);
+const ddb = DynamoDBDocumentClient.from(ddbClient, {
+  marshallOptions: { removeUndefinedValues: true },
+});
 const eventbridge = new EventBridgeClient({});
 const logger = new Logger({ serviceName: "MatchProcessor" });
 
@@ -45,80 +49,119 @@ const processMatchIdempotent = makeIdempotent(
       correlationId: sessionId,
     });
 
-    // Fetch match data and timeline in parallel
-    const [matchData, timelineData] = await Promise.all([
-      getMatchData(region, matchId),
-      getMatchTimeline(region, matchId),
-    ]);
+    try {
+      // Fetch match data, timeline, and summoner data in parallel
+      const results = await Promise.all([
+        getMatchData(region, matchId),
+        getMatchTimeline(region, matchId),
+        getSummonerByPuuid(region, puuid),
+      ]);
 
-    // Filter to agent-required fields
-    const filteredData = filterMatchData(matchData, timelineData, puuid);
+      const [matchData, timelineData, summonerData] = results as [
+        Awaited<ReturnType<typeof getMatchData>>,
+        Awaited<ReturnType<typeof getMatchTimeline>>,
+        Awaited<ReturnType<typeof getSummonerByPuuid>>,
+      ];
 
-    // Write to DynamoDB with 30-day TTL
-    const dataKey = `match:${matchId}:puuid:${puuid}`;
-    const expiresAt =
-      Math.floor(Date.now() / MILLISECONDS_TO_SECONDS) + THIRTY_DAYS_IN_SECONDS;
+      // Fetch rank data (not parallelized because it needs summonerId)
+      let rankData;
+      try {
+        rankData = await getSummonerRank(region, summonerData.id);
+      } catch (rankError) {
+        logger.warn("Failed to fetch rank data, using default", {
+          error: rankError,
+          summonerId: summonerData.id,
+        });
+        rankData = {
+          tier: "UNRANKED",
+          rank: "",
+          leaguePoints: 0,
+          wins: 0,
+          losses: 0,
+          winRate: 0,
+        };
+      }
 
-    await ddb.send(
-      new PutCommand({
-        TableName: process.env.MATCH_DATA_TABLE,
-        Item: {
-          dataKey,
+      // Filter to agent-required fields
+      const filteredData = filterMatchData(matchData, timelineData, puuid);
+
+      // Write to DynamoDB with 30-day TTL
+      const dataKey = `match:${matchId}:puuid:${puuid}`;
+      const expiresAt =
+        Math.floor(Date.now() / MILLISECONDS_TO_SECONDS) +
+        THIRTY_DAYS_IN_SECONDS;
+
+      await ddb.send(
+        new PutCommand({
+          TableName: process.env.MATCH_DATA_TABLE,
+          Item: {
+            dataKey,
+            matchId,
+            puuid,
+            ...filteredData,
+            rankInfo: rankData, // ADD rank data
+            expiresAt,
+          },
+        })
+      );
+
+      logger.info("Match data written to DynamoDB", {
+        dataKey,
+        matchId,
+        hasRankData: !!rankData,
+        correlationId: sessionId,
+      });
+
+      // Send progress update via WebSocket
+      await sendWebSocketUpdate(sessionId, {
+        status: "processing",
+        message: `Data fetching complete for match ${matchId}`,
+        progress: 50,
+      });
+
+      // Publish EventBridge event
+      const eventDetail: EventBridgeMatchEvent = {
+        source: "hexcore.match.processor",
+        "detail-type": "match.filtered.ready",
+        detail: {
+          keys: [dataKey],
+          sessionId,
           matchId,
           puuid,
-          ...filteredData,
-          expiresAt,
+          region,
+          year: message.year,
+          schemaVersion: "1.0",
         },
-      })
-    );
+      };
 
-    logger.info("Match data written to DynamoDB", {
-      dataKey,
-      matchId,
-      correlationId: sessionId,
-    });
+      await eventbridge.send(
+        new PutEventsCommand({
+          Entries: [
+            {
+              Source: eventDetail.source,
+              DetailType: eventDetail["detail-type"],
+              Detail: JSON.stringify(eventDetail.detail),
+            },
+          ],
+        })
+      );
 
-    // Send progress update via WebSocket
-    await sendWebSocketUpdate(sessionId, {
-      status: "processing",
-      message: `Data fetching complete for match ${matchId}`,
-      progress: 50, // Would calculate actual progress
-    });
-
-    // Publish EventBridge event
-    const eventDetail: EventBridgeMatchEvent = {
-      source: "hexcore.match.processor",
-      "detail-type": "match.filtered.ready",
-      detail: {
-        keys: [dataKey],
+      logger.info("EventBridge event published", {
+        matchId,
         sessionId,
+        correlationId: sessionId,
+      });
+
+      return { matchId, status: "success" };
+    } catch (error) {
+      logger.error("Error in processMatchIdempotent", {
+        error: error instanceof Error ? error.message : "Unknown error",
+        stack: error instanceof Error ? error.stack : undefined,
         matchId,
         puuid,
-        region,
-        year: message.year,
-        schemaVersion: "1.0",
-      },
-    };
-
-    await eventbridge.send(
-      new PutEventsCommand({
-        Entries: [
-          {
-            Source: eventDetail.source,
-            DetailType: eventDetail["detail-type"],
-            Detail: JSON.stringify(eventDetail.detail),
-          },
-        ],
-      })
-    );
-
-    logger.info("EventBridge event published", {
-      matchId,
-      sessionId,
-      correlationId: sessionId,
-    });
-
-    return { matchId, status: "success" };
+      });
+      throw error;
+    }
   },
   {
     persistenceStore,

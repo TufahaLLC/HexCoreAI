@@ -5,27 +5,27 @@
  * Progress range: 85-90%
  */
 
-import type { Handler } from "aws-lambda";
 import { Logger } from "@aws-lambda-powertools/logger";
-import { Tracer } from "@aws-lambda-powertools/tracer";
+import type { Handler } from "aws-lambda";
 import { ZodError } from "zod";
-import { sendWebSocketUpdate } from "../../shared/websocket-client";
 import {
-  invokeBedrockAgentWithTracing,
   formatAgentInput,
+  invokeBedrockAgentWithTracing,
+  resolveAgentEnvironment,
 } from "../../shared/bedrock-client";
 import {
-  registerSession,
+  type AgentOrchestratorInput,
+  agentOrchestratorInputSchema,
+} from "../../shared/schemas";
+import {
   completeSession,
   failSession,
   generateSessionId,
+  registerSession,
 } from "../../shared/session-manager";
-import {
-  agentOrchestratorInputSchema,
-  type AgentOrchestratorInput,
-} from "../../shared/schemas";
+import { sendWebSocketUpdate } from "../../shared/websocket-client";
 
-interface CompetitiveAgentOutput {
+type CompetitiveAgentOutput = {
   agentName: string;
   status: "success" | "failed";
   analysis: string;
@@ -35,10 +35,9 @@ interface CompetitiveAgentOutput {
     executionTimeMs?: number;
     toolInvocations?: number;
   };
-}
+};
 
 const logger = new Logger({ serviceName: "CompetitiveAgentOrchestrator" });
-const tracer = new Tracer({ serviceName: "CompetitiveAgentOrchestrator" });
 
 /**
  * Main handler for Competitive Agent orchestration
@@ -85,7 +84,10 @@ async function invokeCompetitiveAgent(
 ): Promise<CompetitiveAgentOutput> {
   const { sessionId, matchId, puuid } = input;
   let toolInvocationCount = 0;
-  let currentProgress = 85;
+  const currentProgress = 90;
+  const { agentId, agentAliasId } = resolveAgentEnvironment("competitive", {
+    agentLabel: "CompetitiveAgent",
+  });
 
   // Generate isolated session ID for this agent
   const agentSessionId = generateSessionId("CompetitiveAgent", matchId);
@@ -109,8 +111,8 @@ async function invokeCompetitiveAgent(
 
     // Invoke agent with enhanced trace handling
     const result = await invokeBedrockAgentWithTracing({
-      agentId: process.env.COMPETITIVE_AGENT_ID!,
-      agentAliasId: process.env.COMPETITIVE_AGENT_ALIAS_ID!,
+      agentId,
+      agentAliasId,
       sessionId: agentSessionId,
       inputText: formatAgentInput({
         analysisType: "competitive progression",

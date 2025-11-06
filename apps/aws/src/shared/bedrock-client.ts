@@ -5,18 +5,45 @@
  * and comprehensive trace event handling for transparent AI reasoning visibility.
  */
 
+import { Logger } from "@aws-lambda-powertools/logger";
 import {
   BedrockAgentRuntimeClient,
   InvokeAgentCommand,
   type InvokeAgentCommandInput,
   type ResponseStream,
 } from "@aws-sdk/client-bedrock-agent-runtime";
-import { Logger } from "@aws-lambda-powertools/logger";
-import { Tracer } from "@aws-lambda-powertools/tracer";
 import { sendWebSocketUpdate as sendWebSocketMessage } from "./websocket-client";
 
+type AgentEnvironmentOptions = {
+  agentLabel?: string;
+};
+
+export function resolveAgentEnvironment(
+  agentKey: string,
+  options: AgentEnvironmentOptions = {}
+): { agentId: string; agentAliasId?: string } {
+  const normalizedKey = agentKey.toUpperCase();
+  const agentLabel = options.agentLabel ?? agentKey;
+
+  const agentIdKey = `${normalizedKey}_AGENT_ID`;
+  const aliasKey = `${normalizedKey}_AGENT_ALIAS_ID`;
+
+  const agentId = process.env[agentIdKey] ?? process.env.BEDROCK_AGENT_ID;
+
+  if (!agentId) {
+    throw new Error(
+      `${agentLabel} configuration missing: set ${agentIdKey} or BEDROCK_AGENT_ID environment variable.`
+    );
+  }
+
+  const alias =
+    process.env[aliasKey] ?? process.env.BEDROCK_AGENT_ALIAS_ID ?? "";
+  const agentAliasId = alias.trim().length > 0 ? alias : undefined;
+
+  return { agentId, agentAliasId };
+}
+
 const logger = new Logger({ serviceName: "bedrock-client" });
-const tracer = new Tracer({ serviceName: "bedrock-client" });
 
 const bedrockClient = new BedrockAgentRuntimeClient({
   region: process.env.AWS_REGION || "us-east-1",
@@ -25,18 +52,18 @@ const bedrockClient = new BedrockAgentRuntimeClient({
 /**
  * Configuration for agent invocation
  */
-export interface BedrockAgentConfig {
+export type BedrockAgentConfig = {
   agentId: string;
-  agentAliasId: string;
+  agentAliasId?: string;
   sessionId: string;
   inputText: string;
   enableTrace?: boolean;
-}
+};
 
 /**
  * Result from agent invocation including response and metadata
  */
-export interface BedrockAgentResult {
+export type BedrockAgentResult = {
   completion: string;
   sessionId: string;
   traceEvents?: TraceEvent[];
@@ -45,17 +72,68 @@ export interface BedrockAgentResult {
     executionTimeMs: number;
     toolInvocations: number;
   };
-}
+};
 
 /**
  * Trace event types for monitoring agent reasoning
  */
-export interface TraceEvent {
-  type: "reasoning" | "tool_invocation" | "tool_result" | "preprocessing" | "postprocessing";
+export type TraceEvent = {
+  type:
+    | "reasoning"
+    | "tool_invocation"
+    | "tool_result"
+    | "preprocessing"
+    | "postprocessing";
   timestamp: number;
   content: string;
   metadata?: Record<string, unknown>;
-}
+};
+
+type ModelInvocationInput = {
+  text?: string;
+};
+
+type PreProcessingTrace = {
+  modelInvocationInput?: ModelInvocationInput;
+};
+
+type RationaleTrace = {
+  text?: string;
+};
+
+type ActionGroupInvocationInput = {
+  actionGroupName?: string;
+  apiPath?: string;
+  parameters?: unknown;
+};
+
+type InvocationTrace = {
+  actionGroupInvocationInput?: ActionGroupInvocationInput;
+};
+
+type ActionGroupInvocationOutput = {
+  text?: string;
+};
+
+type ObservationTrace = {
+  actionGroupInvocationOutput?: ActionGroupInvocationOutput;
+};
+
+type OrchestrationTrace = {
+  rationale?: RationaleTrace;
+  invocationInput?: InvocationTrace;
+  observation?: ObservationTrace;
+};
+
+type PostProcessingTrace = {
+  modelInvocationOutput?: unknown;
+};
+
+type TracePayload = {
+  preProcessingTrace?: PreProcessingTrace;
+  orchestrationTrace?: OrchestrationTrace;
+  postProcessingTrace?: PostProcessingTrace;
+};
 
 /**
  * Invokes a Bedrock Agent with streaming and comprehensive trace event handling
@@ -84,15 +162,19 @@ export async function invokeBedrockAgentWithTracing(
   });
 
   try {
-    const input: InvokeAgentCommandInput = {
+    const input: Partial<InvokeAgentCommandInput> &
+      Pick<InvokeAgentCommandInput, "agentId" | "sessionId" | "inputText"> = {
       agentId: config.agentId,
-      agentAliasId: config.agentAliasId,
       sessionId: config.sessionId,
       inputText: config.inputText,
       enableTrace: config.enableTrace ?? true,
     };
 
-    const command = new InvokeAgentCommand(input);
+    if (config.agentAliasId) {
+      input.agentAliasId = config.agentAliasId;
+    }
+
+    const command = new InvokeAgentCommand(input as InvokeAgentCommandInput);
     const response = await bedrockClient.send(command);
 
     // Process streaming response
@@ -151,10 +233,10 @@ type TraceContext = {
  * Process preprocessing trace events
  */
 async function processPreProcessingTrace(
-  preProcessingTrace: any,
+  preProcessingTrace: PreProcessingTrace | undefined,
   context: TraceContext
 ): Promise<void> {
-  const modelInvocationInput = preProcessingTrace.modelInvocationInput;
+  const modelInvocationInput = preProcessingTrace?.modelInvocationInput;
   if (modelInvocationInput?.text) {
     context.traceEvents.push({
       type: "preprocessing",
@@ -175,7 +257,7 @@ async function processPreProcessingTrace(
  * Process agent rationale trace
  */
 async function processRationaleTrace(
-  rationale: any,
+  rationale: RationaleTrace | undefined,
   context: TraceContext
 ): Promise<void> {
   if (rationale?.text) {
@@ -199,10 +281,11 @@ async function processRationaleTrace(
  * Process tool invocation trace
  */
 async function processToolInvocationTrace(
-  invocationInput: any,
+  invocationInput: InvocationTrace | undefined,
   context: TraceContext
 ): Promise<void> {
-  const actionGroupInvocationInput = invocationInput.actionGroupInvocationInput;
+  const actionGroupInvocationInput =
+    invocationInput?.actionGroupInvocationInput;
 
   if (actionGroupInvocationInput) {
     context.toolInvocationCount();
@@ -237,10 +320,10 @@ async function processToolInvocationTrace(
  * Process tool observation trace
  */
 async function processObservationTrace(
-  observation: any,
+  observation: ObservationTrace | undefined,
   context: TraceContext
 ): Promise<void> {
-  const actionGroupInvocationOutput = observation.actionGroupInvocationOutput;
+  const actionGroupInvocationOutput = observation?.actionGroupInvocationOutput;
 
   if (actionGroupInvocationOutput?.text) {
     context.traceEvents.push({
@@ -253,7 +336,11 @@ async function processObservationTrace(
       status: "processing",
       message: "Tool completed",
       timestamp: Date.now(),
-      data: { phase: "tool_result", sessionId: context.sessionId, success: true },
+      data: {
+        phase: "tool_result",
+        sessionId: context.sessionId,
+        success: true,
+      },
     });
   }
 }
@@ -262,21 +349,24 @@ async function processObservationTrace(
  * Process orchestration trace events
  */
 async function processOrchestrationTrace(
-  orchestrationTrace: any,
+  orchestrationTrace: OrchestrationTrace | undefined,
   context: TraceContext
 ): Promise<void> {
   // Rationale - Agent's reasoning before taking action
-  if (orchestrationTrace.rationale) {
+  if (orchestrationTrace?.rationale) {
     await processRationaleTrace(orchestrationTrace.rationale, context);
   }
 
   // InvocationInput - Tool being invoked
-  if (orchestrationTrace.invocationInput) {
-    await processToolInvocationTrace(orchestrationTrace.invocationInput, context);
+  if (orchestrationTrace?.invocationInput) {
+    await processToolInvocationTrace(
+      orchestrationTrace.invocationInput,
+      context
+    );
   }
 
   // Observation - Tool execution result
-  if (orchestrationTrace.observation) {
+  if (orchestrationTrace?.observation) {
     await processObservationTrace(orchestrationTrace.observation, context);
   }
 }
@@ -285,10 +375,10 @@ async function processOrchestrationTrace(
  * Process postprocessing trace events
  */
 function processPostProcessingTrace(
-  postProcessingTrace: any,
+  postProcessingTrace: PostProcessingTrace | undefined,
   context: TraceContext
 ): void {
-  const modelInvocationOutput = postProcessingTrace.modelInvocationOutput;
+  const modelInvocationOutput = postProcessingTrace?.modelInvocationOutput;
   if (modelInvocationOutput) {
     context.traceEvents.push({
       type: "postprocessing",
@@ -306,15 +396,15 @@ async function processStreamEvent(
   context: TraceContext
 ): Promise<void> {
   // Chunk events - Agent response text
-  if (event.chunk && event.chunk.bytes) {
+  if (event.chunk?.bytes) {
     const text = new TextDecoder().decode(event.chunk.bytes);
     context.completion(text);
   }
 
   // Trace events - Agent reasoning and tool invocations
-  if (event.trace && event.trace.trace) {
-    const trace = event.trace.trace;
+  const trace = event.trace?.trace as TracePayload | undefined;
 
+  if (trace) {
     if (trace.preProcessingTrace) {
       await processPreProcessingTrace(trace.preProcessingTrace, context);
     }
@@ -349,7 +439,8 @@ export function formatAgentInput(params: {
     }
   }
 
-  prompt += "\nPlease provide a detailed analysis with specific recommendations.";
+  prompt +=
+    "\nPlease provide a detailed analysis with specific recommendations.";
 
   return prompt;
 }

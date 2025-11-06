@@ -4,8 +4,8 @@ Create a client component demonstrating connection controls, progress UI, agent 
 
 ## Subtasks
 
-- [ ] Create `apps/web/src/components/AnalysisDashboard.tsx`
-- [ ] Paste the implementation below
+- [x] Create `apps/web/src/components/AnalysisDashboard.tsx`
+- [x] Paste the implementation below
 
 ## File: `apps/web/src/components/AnalysisDashboard.tsx`
 
@@ -311,9 +311,9 @@ export const AnalysisDashboard: React.FC = () => {
 
 ## Validation
 
-- [ ] Component compiles and renders
-- [ ] Connect/Disconnect controls work
-- [ ] Progress and messages update in real time
+- [x] Component compiles and renders
+- [ ] Connect/Disconnect controls work (requires WebSocket URL configuration)
+- [ ] Progress and messages update in real time (requires backend connection)
 
 ## Next
 

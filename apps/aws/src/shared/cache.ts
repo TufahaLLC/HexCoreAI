@@ -19,10 +19,12 @@ const logger = new Logger({
 
 // Initialize AWS SDK clients
 const dynamoClient = new DynamoDBClient({});
-const docClient = DynamoDBDocumentClient.from(dynamoClient);
+const docClient = DynamoDBDocumentClient.from(dynamoClient, {
+  marshallOptions: { removeUndefinedValues: true },
+});
 const s3Client = new S3Client({});
 
-export interface CachedAnalysis {
+export type CachedAnalysis = {
   resultId: string;
   s3Key: string;
   synthesis: {
@@ -36,13 +38,13 @@ export interface CachedAnalysis {
       improvements: string[];
     };
   };
-}
+};
 
-export interface CacheLookupParams {
+export type CacheLookupParams = {
   puuid: string;
   region: string;
   year: string;
-}
+};
 
 /**
  * Find cached analysis for a given puuid/region/year combination

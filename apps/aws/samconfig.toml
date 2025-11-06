@@ -8,8 +8,12 @@ version = 0.1
 stack_name = "hexcore-ai-test"
 s3_bucket = "hexcore-ai-deployment-thahashahz-dev"
 s3_prefix = "hexcore-ai-test"
-region = "us-west-2"
-capabilities = "CAPABILITY_IAM"
-parameter_overrides = "Stage=test RiotApiKeySecretName=riot-api-key"
+capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM"
+parameter_overrides = "Stage=\"test\" Environment=\"test\" RiotApiKeySecretName=\"riot-api-key\" CreateAgentAliases=\"true\""
 confirm_changeset = true
 resolve_image_repos = true  # Auto-create ECR repos if needed
+resolve_s3 = true
+profile = "hexcore-ai-test"
+
+[default.global.parameters]
+region = "us-east-2"

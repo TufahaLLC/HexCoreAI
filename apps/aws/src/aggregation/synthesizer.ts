@@ -21,13 +21,13 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { NINETY_DAYS_IN_SECONDS } from "../shared/constants";
 import {
   type AgentAnalysisResult,
   agentAnalysisResultSchema,
   type SynthesizerInput,
   synthesizerInputSchema,
 } from "../shared/schemas";
-import { NINETY_DAYS_IN_SECONDS } from "../shared/constants";
 
 // Initialize Powertools Logger
 const logger = new Logger({
@@ -37,7 +37,9 @@ const logger = new Logger({
 
 // Initialize AWS SDK clients
 const dynamoClient = new DynamoDBClient({});
-const docClient = DynamoDBDocumentClient.from(dynamoClient);
+const docClient = DynamoDBDocumentClient.from(dynamoClient, {
+  marshallOptions: { removeUndefinedValues: true },
+});
 const s3Client = new S3Client({});
 
 // Initialize DynamoDB Persistence Layer for Idempotency
@@ -46,7 +48,7 @@ const persistenceStore = new DynamoDBPersistenceLayer({
 });
 
 // Define synthesis result interface
-interface SynthesisResult {
+type SynthesisResult = {
   resultId: string;
   s3Key: string;
   synthesis: {
@@ -60,14 +62,14 @@ interface SynthesisResult {
       improvements: string[];
     };
   };
-}
+};
 
 // Define summary interface
-interface Summary {
+type Summary = {
   overallScore: number;
   strengths: string[];
   improvements: string[];
-}
+};
 
 /**
  * Helper function to generate summary from agent results

@@ -1,0 +1,161 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Champion Analysis Tools API",
+    "version": "1.0.0",
+    "description": "Tools for analyzing champion performance, mechanics, and matchups"
+  },
+  "paths": {
+    "/getChampionPerformance": {
+      "post": {
+        "summary": "Get Champion Performance",
+        "description": "Retrieve champion-specific performance statistics",
+        "operationId": "getChampionPerformance",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "matchId": {
+                    "type": "string",
+                    "description": "The match ID"
+                  },
+                  "puuid": {
+                    "type": "string",
+                    "description": "The player UUID"
+                  }
+                },
+                "required": ["matchId", "puuid"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "champion": { "type": "string" },
+                    "role": { "type": "string" },
+                    "winRate": { "type": "number" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/analyzeChampionMastery": {
+      "post": {
+        "summary": "Analyze Champion Mastery",
+        "description": "Analyze champion mastery level and performance consistency",
+        "operationId": "analyzeChampionMastery",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "champion": {
+                    "type": "string",
+                    "description": "Champion name"
+                  },
+                  "gamesPlayed": {
+                    "type": "number",
+                    "description": "Number of games played"
+                  },
+                  "winRate": {
+                    "type": "number",
+                    "description": "Win rate percentage"
+                  },
+                  "avgKda": {
+                    "type": "number",
+                    "description": "Average KDA"
+                  }
+                },
+                "required": ["champion", "gamesPlayed", "winRate", "avgKda"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "masteryMetrics": { "type": "object" },
+                    "insights": {
+                      "type": "array",
+                      "items": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/compareToChampionBenchmark": {
+      "post": {
+        "summary": "Compare To Champion Benchmark",
+        "description": "Compare player performance to global champion benchmarks",
+        "operationId": "compareToChampionBenchmark",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "champion": {
+                    "type": "string",
+                    "description": "Champion name"
+                  },
+                  "playerStatsJson": {
+                    "type": "string",
+                    "description": "JSON string of player stats"
+                  }
+                },
+                "required": ["champion", "playerStatsJson"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "benchmarkComparison": { "type": "object" },
+                    "strengths": {
+                      "type": "array",
+                      "items": { "type": "string" }
+                    },
+                    "weaknesses": {
+                      "type": "array",
+                      "items": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
