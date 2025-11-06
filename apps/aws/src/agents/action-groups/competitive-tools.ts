@@ -11,6 +11,47 @@ import { Tracer } from "@aws-lambda-powertools/tracer";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, GetCommand } from "@aws-sdk/lib-dynamodb";
 import type { Context } from "aws-lambda";
+import {
+  CHAMPION_POOL_IDEAL_MAX,
+  CHAMPION_POOL_IDEAL_MIN,
+  CHAMPION_POOL_MAX,
+  CHAMPION_POOL_MIN,
+  CS_CONSISTENCY_EXCELLENT,
+  CS_CONSISTENCY_GOOD,
+  GAMES_TO_CLIMB_BRONZE,
+  GAMES_TO_CLIMB_GOLD_PLUS,
+  GAMES_TO_CLIMB_IRON,
+  GAMES_TO_CLIMB_SILVER,
+  KDA_CONSISTENCY_EXCELLENT,
+  KDA_CONSISTENCY_GOOD,
+  KDA_MINIMUM_HEALTHY,
+  LP_BUFFER_SAFE,
+  LP_CLIMB_NEGATIVE,
+  LP_CLIMB_POSITIVE,
+  LP_GAIN_AVERAGE,
+  LP_GAIN_HEALTHY_MAX,
+  LP_GAIN_HEALTHY_MIN,
+  LP_MAX,
+  PERCENTAGE_MULTIPLIER,
+  READINESS_CS_TARGET,
+  READINESS_CS_WEIGHT,
+  READINESS_KDA_TARGET,
+  READINESS_KDA_WEIGHT,
+  READINESS_LP_WEIGHT,
+  READINESS_SCORE_NEARLY_READY,
+  READINESS_SCORE_NEEDS_IMPROVEMENT,
+  READINESS_SCORE_READY,
+  READINESS_WIN_RATE_WEIGHT,
+  VARIANCE_EXPONENT,
+  WIN_RATE_AVERAGE,
+  WIN_RATE_BELOW_AVERAGE,
+  WIN_RATE_EXCELLENT,
+  WIN_RATE_GOOD,
+  WIN_RATE_IRON_BRONZE_TARGET,
+  WIN_RATE_PLATINUM_PLUS_TARGET,
+  WIN_RATE_POOR,
+  WIN_RATE_SILVER_GOLD_TARGET,
+} from "../../shared/constants";
 
 const logger = new Logger({ serviceName: "hexcore-competitive-tools" });
 const tracer = new Tracer({ serviceName: "hexcore-competitive-tools" });
@@ -18,6 +59,286 @@ const app = new BedrockAgentFunctionResolver({ logger });
 
 const ddbClient = new DynamoDBClient({});
 const ddb = DynamoDBDocumentClient.from(ddbClient);
+
+/**
+ * Helper: Create default unranked data response
+ */
+function createDefaultRankData(puuid: string, season: string, note: string) {
+  return {
+    puuid,
+    season,
+    currentRank: "Unranked",
+    tier: "UNRANKED",
+    division: "",
+    leaguePoints: 0,
+    wins: 0,
+    losses: 0,
+    winRate: "0",
+    note,
+  };
+}
+
+/**
+ * Helper: Calculate win rate from rank data
+ */
+function calculateWinRate(rankData: {
+  wins?: number;
+  losses?: number;
+  winRate?: number;
+}): string {
+  const { wins, losses, winRate } = rankData;
+
+  if (wins && losses) {
+    return ((wins / (wins + losses)) * PERCENTAGE_MULTIPLIER).toFixed(1);
+  }
+
+  if (winRate) {
+    return (winRate * PERCENTAGE_MULTIPLIER).toFixed(1);
+  }
+
+  return "0";
+}
+
+/**
+ * Helper: Determine climb trend based on LP change
+ */
+function determineClimbTrend(
+  avgLpPerGame: number
+): "Climbing" | "Stable" | "Declining" {
+  if (avgLpPerGame > LP_CLIMB_POSITIVE) {
+    return "Climbing";
+  }
+  if (avgLpPerGame >= LP_CLIMB_NEGATIVE) {
+    return "Stable";
+  }
+  return "Declining";
+}
+
+/**
+ * Helper: Determine MMR health
+ */
+function determineMmrHealth(
+  avgLpPerGame: number
+): "Healthy" | "Normal" | "Damaged" {
+  if (avgLpPerGame > LP_GAIN_AVERAGE) {
+    return "Healthy";
+  }
+  if (avgLpPerGame > -LP_GAIN_AVERAGE) {
+    return "Normal";
+  }
+  return "Damaged";
+}
+
+/**
+ * Helper: Generate rank trend insights
+ */
+function generateRankTrendInsights(params: {
+  winRate: number;
+  recentWinRate: number;
+  recentMatchesLength: number;
+  mmrHealth: "Healthy" | "Normal" | "Damaged";
+  climbTrend: "Climbing" | "Stable" | "Declining";
+}): string[] {
+  const { winRate, recentWinRate, recentMatchesLength, mmrHealth, climbTrend } =
+    params;
+  const insights: string[] = [];
+
+  if (winRate >= WIN_RATE_GOOD) {
+    insights.push(
+      `Strong overall win rate (${winRate.toFixed(1)}%). Continue current approach for consistent climbing`
+    );
+  } else if (winRate < WIN_RATE_POOR) {
+    insights.push(
+      `Win rate (${winRate.toFixed(1)}%) below 50%. Focus on fundamentals and reduce mistakes to improve consistency`
+    );
+  }
+
+  if (recentWinRate >= WIN_RATE_EXCELLENT) {
+    insights.push(
+      `Recent form is excellent (${recentWinRate.toFixed(1)}% over last ${recentMatchesLength} games). Momentum is in your favor`
+    );
+  } else if (recentWinRate < WIN_RATE_POOR) {
+    insights.push(
+      `Recent performance struggling (${recentWinRate.toFixed(1)}% win rate). Consider taking a break or reviewing recent losses`
+    );
+  }
+
+  if (mmrHealth === "Healthy") {
+    insights.push(
+      "MMR is healthy with positive LP gains. Your skill level is above your current rank"
+    );
+  } else if (mmrHealth === "Damaged") {
+    insights.push(
+      "MMR appears damaged with low LP gains. Focus on improving win rate to repair MMR over time"
+    );
+  }
+
+  if (climbTrend === "Declining" && recentWinRate < WIN_RATE_POOR) {
+    insights.push(
+      "Downward trend detected. Take a break, review fundamentals, or consider adjusting champion pool"
+    );
+  }
+
+  return insights.length > 0
+    ? insights
+    : [
+        "Performance is stable. Continue playing consistently to maintain or improve rank",
+      ];
+}
+
+/**
+ * Helper: Generate rank-specific recommendations
+ */
+function generateRankSpecificRecommendations(rankTier: string): string[] {
+  const recommendations: string[] = [];
+
+  if (rankTier === "Iron" || rankTier === "Bronze") {
+    recommendations.push(
+      "Focus on fundamentals: CS, map awareness, and objective control. Master 2-3 champions thoroughly"
+    );
+    recommendations.push(
+      "Prioritize farming and avoid unnecessary deaths. Each death gives enemies gold and experience advantages"
+    );
+  } else if (rankTier === "Silver" || rankTier === "Gold") {
+    recommendations.push(
+      "Improve wave management and trading patterns. Learn when to freeze, slow push, and crash waves"
+    );
+    recommendations.push(
+      "Enhance map awareness and roaming timings. Track enemy jungler and respond to jungle invades"
+    );
+  } else if (rankTier === "Platinum" || rankTier === "Diamond") {
+    recommendations.push(
+      "Refine macro decision-making. Focus on objective priority, rotation timing, and team coordination"
+    );
+    recommendations.push(
+      "Master champion-specific mechanics and matchup knowledge. Small advantages matter significantly"
+    );
+  } else if (
+    rankTier === "Master" ||
+    rankTier === "Grandmaster" ||
+    rankTier === "Challenger"
+  ) {
+    recommendations.push(
+      "Perfect wave manipulation, back timings, and resource trading. Every decision should have strategic purpose"
+    );
+    recommendations.push(
+      "Study high-level gameplay and meta trends. Communication and team synergy become crucial"
+    );
+  }
+
+  return recommendations;
+}
+
+/**
+ * Helper: Generate champion pool recommendations
+ */
+function generateChampionPoolRecommendations(
+  championPoolSize: number
+): string[] {
+  const recommendations: string[] = [];
+
+  if (championPoolSize > CHAMPION_POOL_MAX) {
+    recommendations.push(
+      `Large champion pool (${championPoolSize} champions). Consider narrowing to ${CHAMPION_POOL_IDEAL_MIN}-${CHAMPION_POOL_IDEAL_MAX} champions for better mastery and consistency`
+    );
+  } else if (championPoolSize <= CHAMPION_POOL_MIN) {
+    recommendations.push(
+      "Limited champion pool. Add 1-2 comfort picks to handle difficult matchups and team compositions"
+    );
+  }
+
+  return recommendations;
+}
+
+/**
+ * Helper: Generate win rate recommendations
+ */
+function generateWinRateRecommendations(winRate: number): string[] {
+  const recommendations: string[] = [];
+
+  if (winRate < WIN_RATE_BELOW_AVERAGE) {
+    recommendations.push(
+      `Win rate below ${WIN_RATE_AVERAGE}%. Focus on reducing mistakes rather than making plays. Consistency beats flashy plays`
+    );
+  } else if (winRate >= WIN_RATE_GOOD) {
+    recommendations.push(
+      `Strong win rate (${winRate.toFixed(1)}%). You're ready to climb - play more games to reach your potential rank`
+    );
+  }
+
+  return recommendations;
+}
+
+/**
+ * Helper: Generate role-specific recommendations
+ */
+function generateRoleRecommendations(mainRole: string): string[] {
+  const recommendations: string[] = [];
+
+  if (mainRole === "JUNGLE") {
+    recommendations.push(
+      "As jungler: Track enemy jungler pathing, prioritize counter-ganking, and maintain vision control around objectives"
+    );
+  } else if (mainRole === "UTILITY") {
+    recommendations.push(
+      "As support: Maximize roaming efficiency, maintain vision control, and protect carries in teamfights"
+    );
+  } else {
+    recommendations.push(
+      `As ${mainRole}: Balance farming with map presence. Missing farm is acceptable when securing objectives or preventing enemy advantages`
+    );
+  }
+
+  return recommendations;
+}
+
+/**
+ * Helper: Determine if rank is low tier (Iron/Bronze)
+ */
+function isLowTierRank(rank: string): boolean {
+  return rank.includes("Iron") || rank.includes("Bronze");
+}
+
+/**
+ * Helper: Get target win rate for rank
+ */
+function getTargetWinRate(rank: string): string {
+  if (isLowTierRank(rank)) {
+    return `${WIN_RATE_IRON_BRONZE_TARGET}%`;
+  }
+  if (rank.includes("Silver") || rank.includes("Gold")) {
+    return `${WIN_RATE_SILVER_GOLD_TARGET}%`;
+  }
+  return `${WIN_RATE_PLATINUM_PLUS_TARGET}%`;
+}
+
+/**
+ * Helper: Get average games to climb for rank
+ */
+function getAverageGamesToClimb(rank: string): number {
+  if (rank.includes("Iron")) {
+    return GAMES_TO_CLIMB_IRON;
+  }
+  if (rank.includes("Bronze")) {
+    return GAMES_TO_CLIMB_BRONZE;
+  }
+  if (rank.includes("Silver")) {
+    return GAMES_TO_CLIMB_SILVER;
+  }
+  return GAMES_TO_CLIMB_GOLD_PLUS;
+}
+
+/**
+ * Helper: Get key focus areas for rank
+ */
+function getKeyFocusAreas(rank: string): string[] {
+  const isLowTier = isLowTierRank(rank);
+  return [
+    isLowTier ? "CS and farming fundamentals" : "Wave management and trading",
+    isLowTier ? "Reducing deaths" : "Objective priority",
+    isLowTier ? "Basic map awareness" : "Advanced macro decisions",
+  ];
+}
 
 /**
  * Tool: Get Rank Progression Data
@@ -40,20 +361,11 @@ app.tool<{ puuid: string; season: string }>(
 
       if (!result.Item?.rankInfo) {
         logger.warn("Rank data not found", { puuid, season });
-
-        // Return default unranked data instead of failing
-        return {
+        return createDefaultRankData(
           puuid,
           season,
-          currentRank: "Unranked",
-          tier: "UNRANKED",
-          division: "",
-          leaguePoints: 0,
-          wins: 0,
-          losses: 0,
-          winRate: "0",
-          note: "Rank data not available for this player",
-        };
+          "Rank data not available for this player"
+        );
       }
 
       const rankData = result.Item.rankInfo || result.Item;
@@ -77,15 +389,7 @@ app.tool<{ puuid: string; season: string }>(
         leaguePoints: rankData.leaguePoints || 0,
         wins: rankData.wins || 0,
         losses: rankData.losses || 0,
-        winRate:
-          rankData.wins && rankData.losses
-            ? (
-                (rankData.wins / (rankData.wins + rankData.losses)) *
-                100
-              ).toFixed(1)
-            : rankData.winRate
-              ? (rankData.winRate * 100).toFixed(1)
-              : "0",
+        winRate: calculateWinRate(rankData),
       };
     } catch (error) {
       logger.error("Error fetching rank progression data", {
@@ -95,18 +399,7 @@ app.tool<{ puuid: string; season: string }>(
       });
 
       // Return default instead of throwing
-      return {
-        puuid,
-        season,
-        currentRank: "Unranked",
-        tier: "UNRANKED",
-        division: "",
-        leaguePoints: 0,
-        wins: 0,
-        losses: 0,
-        winRate: "0",
-        note: "Error retrieving rank data",
-      };
+      return createDefaultRankData(puuid, season, "Error retrieving rank data");
     }
   },
   {
@@ -138,13 +431,14 @@ app.tool<{
 
     try {
       const totalGames = wins + losses;
-      const winRate = totalGames > 0 ? (wins / totalGames) * 100 : 0;
+      const winRate =
+        totalGames > 0 ? (wins / totalGames) * PERCENTAGE_MULTIPLIER : 0;
 
       // Analyze recent form (last 10 games)
       const recentWins = recentMatches.filter((m) => m.result === "win").length;
       const recentWinRate =
         recentMatches.length > 0
-          ? (recentWins / recentMatches.length) * 100
+          ? (recentWins / recentMatches.length) * PERCENTAGE_MULTIPLIER
           : 0;
 
       // Calculate LP trend
@@ -155,72 +449,18 @@ app.tool<{
       const avgLpPerGame =
         recentMatches.length > 0 ? totalLpChange / recentMatches.length : 0;
 
-      // Determine climb trend
-      let climbTrend: "Climbing" | "Stable" | "Declining";
-
-      if (avgLpPerGame > 2) {
-        climbTrend = "Climbing";
-      } else if (avgLpPerGame >= -2) {
-        climbTrend = "Stable";
-      } else {
-        climbTrend = "Declining";
-      }
-
-      // Determine MMR health
-      let mmrHealth: "Healthy" | "Normal" | "Damaged";
-
-      if (avgLpPerGame > 15) {
-        mmrHealth = "Healthy";
-      } else if (avgLpPerGame > -15) {
-        mmrHealth = "Normal";
-      } else {
-        mmrHealth = "Damaged";
-      }
+      // Determine climb trend and MMR health
+      const climbTrend = determineClimbTrend(avgLpPerGame);
+      const mmrHealth = determineMmrHealth(avgLpPerGame);
 
       // Generate insights
-      const insights: string[] = [];
-
-      if (winRate >= 55) {
-        insights.push(
-          `Strong overall win rate (${winRate.toFixed(1)}%). Continue current approach for consistent climbing`
-        );
-      } else if (winRate < 45) {
-        insights.push(
-          `Win rate (${winRate.toFixed(1)}%) below 50%. Focus on fundamentals and reduce mistakes to improve consistency`
-        );
-      }
-
-      if (recentWinRate >= 60) {
-        insights.push(
-          `Recent form is excellent (${recentWinRate.toFixed(1)}% over last ${recentMatches.length} games). Momentum is in your favor`
-        );
-      } else if (recentWinRate < 40) {
-        insights.push(
-          `Recent performance struggling (${recentWinRate.toFixed(1)}% win rate). Consider taking a break or reviewing recent losses`
-        );
-      }
-
-      if (mmrHealth === "Healthy") {
-        insights.push(
-          "MMR is healthy with positive LP gains. Your skill level is above your current rank"
-        );
-      } else if (mmrHealth === "Damaged") {
-        insights.push(
-          "MMR appears damaged with low LP gains. Focus on improving win rate to repair MMR over time"
-        );
-      }
-
-      if (climbTrend === "Declining" && recentWinRate < 45) {
-        insights.push(
-          "Downward trend detected. Take a break, review fundamentals, or consider adjusting champion pool"
-        );
-      }
-
-      if (insights.length === 0) {
-        insights.push(
-          "Performance is consistent. Continue maintaining current strategies"
-        );
-      }
+      const insights = generateRankTrendInsights({
+        winRate,
+        recentWinRate,
+        recentMatchesLength: recentMatches.length,
+        mmrHealth,
+        climbTrend,
+      });
 
       const result = {
         rankMetrics: {
@@ -277,81 +517,16 @@ app.tool<{
     });
 
     try {
-      const recommendations: string[] = [];
+      // Extract rank tier (e.g., "Gold" from "Gold 2")
+      const rankTier = currentRank.split(" ")[0];
 
-      // Rank-specific recommendations
-      const rankTier = currentRank.split(" ")[0]; // Extract tier (e.g., "Gold" from "Gold 2")
-
-      if (rankTier === "Iron" || rankTier === "Bronze") {
-        recommendations.push(
-          "Focus on fundamentals: CS, map awareness, and objective control. Master 2-3 champions thoroughly"
-        );
-        recommendations.push(
-          "Prioritize farming and avoid unnecessary deaths. Each death gives enemies gold and experience advantages"
-        );
-      } else if (rankTier === "Silver" || rankTier === "Gold") {
-        recommendations.push(
-          "Improve wave management and trading patterns. Learn when to freeze, slow push, and crash waves"
-        );
-        recommendations.push(
-          "Enhance map awareness and roaming timings. Track enemy jungler and respond to jungle invades"
-        );
-      } else if (rankTier === "Platinum" || rankTier === "Diamond") {
-        recommendations.push(
-          "Refine macro decision-making. Focus on objective priority, rotation timing, and team coordination"
-        );
-        recommendations.push(
-          "Master champion-specific mechanics and matchup knowledge. Small advantages matter significantly"
-        );
-      } else if (
-        rankTier === "Master" ||
-        rankTier === "Grandmaster" ||
-        rankTier === "Challenger"
-      ) {
-        recommendations.push(
-          "Perfect wave manipulation, back timings, and resource trading. Every decision should have strategic purpose"
-        );
-        recommendations.push(
-          "Study high-level gameplay and meta trends. Communication and team synergy become crucial"
-        );
-      }
-
-      // Champion pool recommendations
-      if (championPool.length > 5) {
-        recommendations.push(
-          `Large champion pool (${championPool.length} champions). Consider narrowing to 3-4 champions for better mastery and consistency`
-        );
-      } else if (championPool.length <= 2) {
-        recommendations.push(
-          "Limited champion pool. Add 1-2 comfort picks to handle difficult matchups and team compositions"
-        );
-      }
-
-      // Win rate specific advice
-      if (winRate < 48) {
-        recommendations.push(
-          "Win rate below 50%. Focus on reducing mistakes rather than making plays. Consistency beats flashy plays"
-        );
-      } else if (winRate >= 55) {
-        recommendations.push(
-          `Strong win rate (${winRate.toFixed(1)}%). You're ready to climb - play more games to reach your potential rank`
-        );
-      }
-
-      // Role-specific advice
-      if (mainRole === "JUNGLE") {
-        recommendations.push(
-          "As jungler: Track enemy jungler pathing, prioritize counter-ganking, and maintain vision control around objectives"
-        );
-      } else if (mainRole === "UTILITY") {
-        recommendations.push(
-          "As support: Maximize roaming efficiency, maintain vision control, and protect carries in teamfights"
-        );
-      } else {
-        recommendations.push(
-          `As ${mainRole}: Balance farming with map presence. Missing farm is acceptable when securing objectives or preventing enemy advantages`
-        );
-      }
+      // Generate all recommendations using helper functions
+      const recommendations = [
+        ...generateRankSpecificRecommendations(rankTier),
+        ...generateChampionPoolRecommendations(championPool.length),
+        ...generateWinRateRecommendations(winRate),
+        ...generateRoleRecommendations(mainRole),
+      ];
 
       const result = {
         currentRank,
@@ -393,31 +568,10 @@ app.tool<{ rank: string }>(
 
       const result = {
         rank,
-        targetWinRate:
-          rank.includes("Iron") || rank.includes("Bronze")
-            ? "52%"
-            : rank.includes("Silver") || rank.includes("Gold")
-              ? "53%"
-              : "54%",
-        averageGamesToClimb: rank.includes("Iron")
-          ? 40
-          : rank.includes("Bronze")
-            ? 50
-            : rank.includes("Silver")
-              ? 60
-              : 70,
-        keyFocusAreas: [
-          rank.includes("Iron") || rank.includes("Bronze")
-            ? "CS and farming fundamentals"
-            : "Wave management and trading",
-          rank.includes("Iron") || rank.includes("Bronze")
-            ? "Reducing deaths"
-            : "Objective priority",
-          rank.includes("Iron") || rank.includes("Bronze")
-            ? "Basic map awareness"
-            : "Advanced macro decisions",
-        ],
-        lpGainsTarget: "+18 to +22 LP per win indicates healthy MMR",
+        targetWinRate: getTargetWinRate(rank),
+        averageGamesToClimb: getAverageGamesToClimb(rank),
+        keyFocusAreas: getKeyFocusAreas(rank),
+        lpGainsTarget: `+${LP_GAIN_HEALTHY_MIN} to +${LP_GAIN_HEALTHY_MAX} LP per win indicates healthy MMR`,
         note: "TODO: Integration with U.GG/OP.GG API pending (Task 11.5)",
       };
 
@@ -540,20 +694,30 @@ app.tool<{ historyJson: string }>(
       const avgKda =
         history.reduce((sum, m) => sum + m.kda, 0) / history.length;
       const kdaVariance =
-        history.reduce((sum, m) => sum + (m.kda - avgKda) ** 2, 0) /
-        history.length;
+        history.reduce(
+          (sum, m) => sum + (m.kda - avgKda) ** VARIANCE_EXPONENT,
+          0
+        ) / history.length;
       const kdaStdDev = Math.sqrt(kdaVariance);
 
       const avgCs = history.reduce((sum, m) => sum + m.cs, 0) / history.length;
       const csVariance =
-        history.reduce((sum, m) => sum + (m.cs - avgCs) ** 2, 0) /
-        history.length;
+        history.reduce(
+          (sum, m) => sum + (m.cs - avgCs) ** VARIANCE_EXPONENT,
+          0
+        ) / history.length;
       const csStdDev = Math.sqrt(csVariance);
 
       let consistencyRating: string;
-      if (kdaStdDev < 1.0 && csStdDev < 30) {
+      if (
+        kdaStdDev < KDA_CONSISTENCY_EXCELLENT &&
+        csStdDev < CS_CONSISTENCY_EXCELLENT
+      ) {
         consistencyRating = "Highly Consistent";
-      } else if (kdaStdDev < 1.5 && csStdDev < 50) {
+      } else if (
+        kdaStdDev < KDA_CONSISTENCY_GOOD &&
+        csStdDev < CS_CONSISTENCY_GOOD
+      ) {
         consistencyRating = "Consistent";
       } else {
         consistencyRating = "Inconsistent";
@@ -570,10 +734,10 @@ app.tool<{ historyJson: string }>(
           consistencyRating === "Inconsistent"
             ? "High performance variance detected. Focus on maintaining consistent fundamentals across all games"
             : "Good performance consistency. Continue maintaining stable gameplay patterns",
-          kdaStdDev > 1.5
+          kdaStdDev > KDA_CONSISTENCY_GOOD
             ? "KDA varies significantly - work on reducing deaths and maintaining safer playstyle"
             : "KDA is stable across matches",
-          csStdDev > 50
+          csStdDev > CS_CONSISTENCY_GOOD
             ? "CS varies significantly - focus on consistent farming patterns"
             : "CS is consistent across matches",
         ],
@@ -619,24 +783,37 @@ app.tool<{ historyJson: string; currentLP: number }>(
       // const promotionData = await externalAPIClient.getPromotionDataFromMobalytics();
 
       const recentWins = history.filter((m) => m.result === "win").length;
-      const winRate = (recentWins / history.length) * 100;
+      const winRate = (recentWins / history.length) * PERCENTAGE_MULTIPLIER;
       const avgKda =
         history.reduce((sum, m) => sum + m.kda, 0) / history.length;
       const avgCs = history.reduce((sum, m) => sum + m.cs, 0) / history.length;
 
       // Calculate readiness score (0-100)
       let readinessScore = 0;
-      readinessScore += Math.min(winRate, 100) * 0.4; // Win rate worth 40%
-      readinessScore += Math.min((avgKda / 5.0) * 100, 100) * 0.3; // KDA worth 30%
-      readinessScore += Math.min((avgCs / 250) * 100, 100) * 0.2; // CS worth 20%
-      readinessScore += Math.min((currentLP / 100) * 100, 100) * 0.1; // LP worth 10%
+      readinessScore +=
+        Math.min(winRate, PERCENTAGE_MULTIPLIER) * READINESS_WIN_RATE_WEIGHT; // Win rate worth 40%
+      readinessScore +=
+        Math.min(
+          (avgKda / READINESS_KDA_TARGET) * PERCENTAGE_MULTIPLIER,
+          PERCENTAGE_MULTIPLIER
+        ) * READINESS_KDA_WEIGHT; // KDA worth 30%
+      readinessScore +=
+        Math.min(
+          (avgCs / READINESS_CS_TARGET) * PERCENTAGE_MULTIPLIER,
+          PERCENTAGE_MULTIPLIER
+        ) * READINESS_CS_WEIGHT; // CS worth 20%
+      readinessScore +=
+        Math.min(
+          (currentLP / LP_MAX) * PERCENTAGE_MULTIPLIER,
+          PERCENTAGE_MULTIPLIER
+        ) * READINESS_LP_WEIGHT; // LP worth 10%
 
       let readinessLevel: string;
-      if (readinessScore >= 75) {
+      if (readinessScore >= READINESS_SCORE_READY) {
         readinessLevel = "Ready for Promotion";
-      } else if (readinessScore >= 60) {
+      } else if (readinessScore >= READINESS_SCORE_NEARLY_READY) {
         readinessLevel = "Nearly Ready";
-      } else if (readinessScore >= 45) {
+      } else if (readinessScore >= READINESS_SCORE_NEEDS_IMPROVEMENT) {
         readinessLevel = "Needs Improvement";
       } else {
         readinessLevel = "Not Ready";
@@ -651,16 +828,16 @@ app.tool<{ historyJson: string; currentLP: number }>(
         readinessScore: readinessScore.toFixed(0),
         readinessLevel,
         recommendations: [
-          readinessScore < 60
+          readinessScore < READINESS_SCORE_NEARLY_READY
             ? "Focus on improving fundamentals before attempting promotion series"
             : "Performance is strong - continue current approach",
-          winRate < 50
+          winRate < WIN_RATE_AVERAGE
             ? "Win rate needs improvement - review losses and identify patterns"
             : "Win rate is solid for climbing",
-          avgKda < 2.5
+          avgKda < KDA_MINIMUM_HEALTHY
             ? "Work on reducing deaths and improving KDA"
             : "KDA is healthy",
-          currentLP < 75
+          currentLP < LP_BUFFER_SAFE
             ? "Build LP buffer before promotion series for safety"
             : "LP is in good position for promotion attempt",
         ],

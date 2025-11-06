@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { v4 as uuidv4 } from "uuid";
 import {
   getConnectionStatusLabel,
@@ -23,7 +24,8 @@ export const AnalysisDashboard = () => {
   // Form state
   const [inputPuuid, setInputPuuid] = useState("");
   const [region, setRegion] = useState("americas");
-  const [year, setYear] = useState(2025);
+  const DEFAULT_YEAR = 2025;
+  const [year, setYear] = useState(DEFAULT_YEAR);
 
   // Analysis state
   const [currentProgress, setCurrentProgress] = useState(0);
@@ -47,49 +49,46 @@ export const AnalysisDashboard = () => {
     };
   } | null>(null);
 
-  // Update state based on messages
+  // Update state based on messages - simplified to reduce complexity
   useEffect(() => {
-    if (lastMessage) {
-      // Update progress
-      if (lastMessage.progress !== undefined) {
-        setCurrentProgress(lastMessage.progress);
-      }
+    if (!lastMessage) {
+      return;
+    }
 
-      // Update status message
-      setAnalysisStatus(lastMessage.message);
+    setAnalysisStatus(lastMessage.message);
 
-      // Track matches
-      if (lastMessage.totalMatches) {
-        setTotalMatches(lastMessage.totalMatches);
-      }
-      if (lastMessage.processedMatches) {
-        setProcessedMatches(lastMessage.processedMatches);
-      }
+    if (lastMessage.progress !== undefined) {
+      setCurrentProgress(lastMessage.progress);
+    }
 
-      // Track agent updates
-      if (lastMessage.agent) {
-        setAgentUpdates((prev) => ({
-          ...prev,
-          [lastMessage.agent as string]: lastMessage.message,
-        }));
-      }
+    if (lastMessage.totalMatches) {
+      setTotalMatches(lastMessage.totalMatches);
+    }
 
-      // Handle completion
-      if (lastMessage.status === "completed" && lastMessage.synthesis) {
-        setCompletedAnalysis({
-          resultId: lastMessage.resultId,
-          s3Key: lastMessage.s3Key,
-          synthesis: lastMessage.synthesis,
-        });
-      }
+    if (lastMessage.processedMatches) {
+      setProcessedMatches(lastMessage.processedMatches);
+    }
+
+    if (lastMessage.agent) {
+      setAgentUpdates((prev) => ({
+        ...prev,
+        [lastMessage.agent as string]: lastMessage.message,
+      }));
+    }
+
+    if (lastMessage.status === "completed" && lastMessage.synthesis) {
+      setCompletedAnalysis({
+        resultId: lastMessage.resultId,
+        s3Key: lastMessage.s3Key,
+        synthesis: lastMessage.synthesis,
+      });
     }
   }, [lastMessage]);
 
   // Start analysis
   const handleStartAnalysis = () => {
     if (!inputPuuid.trim()) {
-      // biome-ignore lint/suspicious/noConsole: User feedback required
-      alert("Please enter a PUUID");
+      toast.error("Please enter a PUUID");
       return;
     }
 
@@ -279,8 +278,8 @@ export const AnalysisDashboard = () => {
               <h3 className="mb-2 font-semibold">Strengths</h3>
               <ul className="list-inside list-disc space-y-1">
                 {completedAnalysis.synthesis.summary.strengths.map(
-                  (strength: string, idx: number) => (
-                    <li className="text-green-600" key={idx}>
+                  (strength: string) => (
+                    <li className="text-green-600" key={strength}>
                       {strength}
                     </li>
                   )

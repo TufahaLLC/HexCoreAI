@@ -11,7 +11,6 @@ import { Tracer } from "@aws-lambda-powertools/tracer";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, GetCommand } from "@aws-sdk/lib-dynamodb";
 import type { Context } from "aws-lambda";
-import type { ItemPurchase } from "../../shared/types";
 
 const logger = new Logger({ serviceName: "hexcore-build-tools" });
 const tracer = new Tracer({ serviceName: "hexcore-build-tools" });
@@ -21,6 +20,13 @@ const ddbClient = new DynamoDBClient({});
 const ddb = DynamoDBDocumentClient.from(ddbClient, {
   marshallOptions: { removeUndefinedValues: true },
 });
+
+// Build analysis constants
+const INVALID_OBJECT_INDEX = -1;
+
+// Additional constants for regex patterns
+const JSON_FRAGMENT_REGEX = /\{[^{}]+\}/g;
+const TRAILING_COMMA_REGEX = /,\s*$/;
 
 /**
  * Tool: Get Match Build Data
@@ -71,7 +77,9 @@ app.tool<{ matchId: string; puuid: string }>(
         itemTimeline: JSON.stringify(buildData?.itemTimeline || []),
         goldPerMinute: JSON.stringify(buildData?.goldPerMinute || []),
         enemyChampions: JSON.stringify(
-          teamComp?.enemies?.map((e: any) => e.championName) || []
+          teamComp?.enemies?.map(
+            (e: { championName: string }) => e.championName
+          ) || []
         ),
       };
     } catch (error) {
@@ -91,6 +99,314 @@ app.tool<{ matchId: string; puuid: string }>(
   }
 );
 
+import {
+  AD_HEAVY_THRESHOLD,
+  AP_HEAVY_THRESHOLD,
+  BASIC_ITEM_COST,
+  BUILD_SIMILARITY_THRESHOLD,
+  HEAL_THRESHOLD,
+  ITEM_ID_BERSERKER_GREAVES,
+  ITEM_ID_DORANS_BLADE,
+  ITEM_ID_GUARDIAN_ANGEL,
+  ITEM_ID_HEALTH_POTION,
+  ITEM_ID_INFINITY_EDGE,
+  ITEM_ID_MAW_OF_MALMORTIUS,
+  ITEM_ID_MERCURIAL_SCIMITAR,
+  ITEM_ID_MORTAL_REMINDER,
+  ITEM_ID_PHANTOM_DANCER,
+  ITEM_ID_QUICKSILVER_SASH,
+  ITEM_ID_RAPID_FIRECANNON,
+  MILLISECONDS_PER_MINUTE,
+  PERCENTAGE_MULTIPLIER,
+  PLACEHOLDER_ITEM_GOLD_VALUE,
+  SUBSTRING_FIRST_100,
+  SUBSTRING_LAST_50,
+  SUBSTRING_START_INDEX,
+  TANK_THRESHOLD,
+  WIN_RATE_EXCELLENT,
+  WIN_RATE_POOR,
+} from "../../shared/constants";
+
+/**
+ * Parse JSON timeline with robust error handling and multiple format support
+ */
+function parseJsonTimeline(jsonInput: string, timelineType: string): unknown[] {
+  if (typeof jsonInput !== "string") {
+    throw new Error(`Invalid ${timelineType} type: ${typeof jsonInput}`);
+  }
+
+  let cleanedInput = jsonInput.trim();
+
+  logger.info("Raw input details", {
+    timelineType,
+    length: cleanedInput.length,
+    startsWithBrace: cleanedInput.startsWith("{"),
+    startsWithBracket: cleanedInput.startsWith("["),
+    first100: cleanedInput.substring(
+      SUBSTRING_START_INDEX,
+      SUBSTRING_FIRST_100
+    ),
+    last100: cleanedInput.substring(
+      Math.max(SUBSTRING_START_INDEX, cleanedInput.length - SUBSTRING_FIRST_100)
+    ),
+  });
+
+  // Handle concatenated JSON objects (no array wrapper)
+  if (cleanedInput.startsWith("{") && !cleanedInput.startsWith("[")) {
+    cleanedInput = handleConcatenatedJson(cleanedInput, timelineType);
+  }
+
+  const parsed = parseJsonWithFallback(cleanedInput, timelineType);
+  return extractArrayFromParsed(parsed, timelineType);
+}
+
+/**
+ * Handle concatenated JSON objects by wrapping in array
+ */
+function handleConcatenatedJson(
+  cleanedInput: string,
+  timelineType: string
+): string {
+  logger.info(`Detected concatenated JSON objects in ${timelineType}`);
+
+  // Check if truncated (doesn't end with })
+  if (!cleanedInput.endsWith("}")) {
+    logger.warn("JSON appears truncated", {
+      timelineType,
+      lastChars: cleanedInput.substring(
+        Math.max(SUBSTRING_START_INDEX, cleanedInput.length - SUBSTRING_LAST_50)
+      ),
+    });
+
+    const lastCompleteObject = cleanedInput.lastIndexOf("}");
+    if (lastCompleteObject === INVALID_OBJECT_INDEX) {
+      logger.warn("No valid JSON objects found in concatenated input");
+      return "";
+    }
+    const processedInput = cleanedInput.substring(0, lastCompleteObject + 1);
+    logger.info("Truncated to last complete object", {
+      timelineType,
+      newLength: processedInput.length,
+    });
+    return processedInput;
+  }
+
+  if (cleanedInput.endsWith(",")) {
+    const cleanedWithoutComma = cleanedInput.replace(TRAILING_COMMA_REGEX, "");
+    logger.info("Removed trailing comma after truncation");
+    return cleanedWithoutComma;
+  }
+
+  // Wrap in array
+  return `[${cleanedInput}]`;
+}
+
+/**
+ * Parse JSON with fallback to fragment parsing for malformed data
+ */
+function parseJsonWithFallback(
+  cleanedInput: string,
+  timelineType: string
+): unknown {
+  try {
+    return JSON.parse(cleanedInput);
+  } catch (primaryParseError) {
+    logger.warn("Primary JSON.parse failed, attempting fragment parsing", {
+      timelineType,
+      error:
+        primaryParseError instanceof Error
+          ? primaryParseError.message
+          : String(primaryParseError),
+    });
+
+    return parseJsonFragments(cleanedInput, primaryParseError as Error);
+  }
+}
+
+/**
+ * Parse JSON fragments when primary parsing fails
+ */
+function parseJsonFragments(
+  cleanedInput: string,
+  primaryParseError: Error
+): unknown {
+  const objectMatches = cleanedInput.match(JSON_FRAGMENT_REGEX);
+
+  if (objectMatches && objectMatches.length > 0) {
+    const parsedObjects: unknown[] = [];
+
+    for (const fragment of objectMatches) {
+      try {
+        parsedObjects.push(JSON.parse(fragment));
+      } catch (fragmentError) {
+        logger.warn("Skipping malformed fragment during fallback parsing", {
+          fragment,
+          error:
+            fragmentError instanceof Error
+              ? fragmentError.message
+              : String(fragmentError),
+        });
+      }
+    }
+
+    if (parsedObjects.length > 0) {
+      logger.info("Fallback fragment parsing succeeded", {
+        fragmentsParsed: parsedObjects.length,
+      });
+      return parsedObjects;
+    }
+  }
+
+  throw primaryParseError;
+}
+
+/**
+ * Extract array from parsed JSON data, handling multiple formats
+ */
+function extractArrayFromParsed(
+  parsed: unknown,
+  timelineType: string
+): unknown[] {
+  logger.info(`Successfully parsed ${timelineType}`, {
+    type: typeof parsed,
+    isArray: Array.isArray(parsed),
+    length: Array.isArray(parsed) ? parsed.length : null,
+  });
+
+  if (Array.isArray(parsed)) {
+    return parsed;
+  }
+
+  if (parsed && typeof parsed === "object") {
+    return handleParsedObject(parsed as Record<string, unknown>, timelineType);
+  }
+
+  throw new Error(`Unexpected parsed type: ${typeof parsed}`);
+}
+
+/**
+ * Handle parsed object by extracting array from known properties
+ */
+function handleParsedObject(
+  parsedObj: Record<string, unknown>,
+  timelineType: string
+): unknown[] {
+  // Columnar format
+  if (Array.isArray(parsedObj.itemId)) {
+    logger.info("Detected columnar format, transposing", { timelineType });
+    return transposeColumnarData(parsedObj);
+  }
+
+  // Check common array property names
+  const arrayProperties =
+    timelineType === "itemTimeline"
+      ? ["itemTimeline", "items", "data"]
+      : ["goldPerMinute", "data", "gold"];
+
+  for (const prop of arrayProperties) {
+    if (Array.isArray(parsedObj[prop])) {
+      return parsedObj[prop] as unknown[];
+    }
+  }
+
+  throw new Error(
+    `Parsed ${timelineType} is an object with keys: ${Object.keys(parsedObj).join(", ")}`
+  );
+}
+
+/**
+ * Transpose columnar data to row format
+ */
+function transposeColumnarData(parsedObj: Record<string, unknown>): unknown[] {
+  const itemIdArray = parsedObj.itemId as unknown[];
+  const timestampArray = parsedObj.timestamp as unknown[];
+  const costArray = parsedObj.cost as unknown[];
+
+  const length = itemIdArray.length;
+  const result: unknown[] = [];
+
+  for (let i = 0; i < length; i++) {
+    result.push({
+      itemId: itemIdArray[i] as number,
+      timestamp: Array.isArray(timestampArray)
+        ? (timestampArray[i] as number)
+        : 0,
+      cost: Array.isArray(costArray) ? (costArray[i] as number) : 0,
+    });
+  }
+
+  logger.info("Transposed successfully", {
+    resultLength: result.length,
+  });
+
+  return result;
+}
+
+/**
+ * Determine adaptation rating based on adaptation rate
+ */
+function determineAdaptationRating(adaptationRate: number): string {
+  if (adaptationRate >= WIN_RATE_EXCELLENT) {
+    return "Flexible";
+  }
+  if (adaptationRate >= WIN_RATE_POOR) {
+    return "Moderate";
+  }
+  return "Rigid";
+}
+
+/**
+ * Calculate build efficiency metrics from timeline and gold data
+ */
+function calculateBuildEfficiency(
+  itemTimeline: unknown[],
+  goldPerMinute: number[]
+) {
+  // Filter major items (cost >= 1000 gold)
+  const majorItems = itemTimeline.filter(
+    (item: unknown) => (item as { cost: number }).cost >= BASIC_ITEM_COST
+  ) as Array<{ timestamp: number; cost: number; itemId?: number }>;
+
+  // Calculate power spike timings
+  const powerSpikes = majorItems.map((item, index: number) => ({
+    itemNumber: index + 1,
+    timestamp: item.timestamp,
+    minute: Math.floor(item.timestamp / MILLISECONDS_PER_MINUTE),
+    itemId: item.itemId || 0,
+  }));
+
+  // Calculate gold efficiency
+  const totalGold = goldPerMinute.reduce(
+    (sum: number, gold: number) => sum + gold,
+    0
+  );
+  const goldSpent = itemTimeline.reduce(
+    (sum: number, item: unknown) => sum + (item as { cost: number }).cost,
+    0
+  );
+  const efficiency =
+    totalGold > 0 ? (goldSpent / totalGold) * PERCENTAGE_MULTIPLIER : 0;
+
+  // Calculate average time between major items
+  const avgMinutesBetweenItems =
+    majorItems.length > 1
+      ? (majorItems[majorItems.length - 1]?.timestamp ??
+          0 - majorItems[0].timestamp) /
+        (majorItems.length - 1) /
+        MILLISECONDS_PER_MINUTE
+      : 0;
+
+  return {
+    efficiency: `${efficiency.toFixed(2)}%`,
+    powerSpikes,
+    avgTimeBetweenMajorItems: `${avgMinutesBetweenItems.toFixed(1)} minutes`,
+    totalGold,
+    goldSpent,
+    itemsPurchased: itemTimeline.length,
+    majorItemsPurchased: majorItems.length,
+  };
+}
+
 /**
  * Tool: Analyze Build Efficiency
  *
@@ -109,277 +425,14 @@ app.tool<{
     });
 
     try {
-      let itemTimeline: any, goldPerMinute: any;
+      // Parse timelines with robust error handling
+      const itemTimeline = parseJsonTimeline(itemTimelineJson, "itemTimeline");
+      const goldPerMinute = parseJsonTimeline(
+        goldPerMinuteJson,
+        "goldPerMinute"
+      );
 
-      // ============ PARSE ITEM TIMELINE ============
-      try {
-        if (typeof itemTimelineJson === "string") {
-          let cleaned = itemTimelineJson.trim();
-
-          logger.info("Raw input details", {
-            length: cleaned.length,
-            startsWithBrace: cleaned.startsWith("{"),
-            startsWithBracket: cleaned.startsWith("["),
-            first100: cleaned.substring(0, 100),
-            last100: cleaned.substring(Math.max(0, cleaned.length - 100)),
-          });
-
-          // Handle concatenated JSON objects (no array wrapper)
-          if (cleaned.startsWith("{") && !cleaned.startsWith("[")) {
-            logger.info("Detected concatenated JSON objects");
-
-            // Check if truncated (doesn't end with })
-            if (!cleaned.endsWith("}")) {
-              logger.warn("JSON appears truncated", {
-                lastChars: cleaned.substring(Math.max(0, cleaned.length - 50)),
-              });
-
-              // Find last complete object
-              const lastCompleteObject = cleaned.lastIndexOf("}");
-
-              if (lastCompleteObject !== -1) {
-                cleaned = cleaned.substring(0, lastCompleteObject + 1);
-                logger.info("Truncated to last complete object", {
-                  newLength: cleaned.length,
-                });
-              } else {
-                throw new Error("Cannot find any complete JSON objects");
-              }
-            }
-
-            if (cleaned.endsWith(",")) {
-              cleaned = cleaned.replace(/,\s*$/, "");
-              logger.info("Removed trailing comma after truncation");
-            }
-
-            // Wrap in array
-            cleaned = `[${cleaned}]`;
-            logger.info("Wrapped concatenated objects in array");
-          }
-
-          // Try to parse
-          let parsed: unknown;
-          try {
-            parsed = JSON.parse(cleaned);
-          } catch (primaryParseError) {
-            logger.warn(
-              "Primary JSON.parse failed, attempting fragment parsing",
-              {
-                error:
-                  primaryParseError instanceof Error
-                    ? primaryParseError.message
-                    : String(primaryParseError),
-              }
-            );
-
-            const objectMatches = cleaned.match(/\{[^{}]+\}/g);
-
-            if (objectMatches && objectMatches.length > 0) {
-              const parsedObjects: any[] = [];
-
-              for (const fragment of objectMatches) {
-                try {
-                  parsedObjects.push(JSON.parse(fragment));
-                } catch (fragmentError) {
-                  logger.warn(
-                    "Skipping malformed fragment during fallback parsing",
-                    {
-                      fragment,
-                      error:
-                        fragmentError instanceof Error
-                          ? fragmentError.message
-                          : String(fragmentError),
-                    }
-                  );
-                }
-              }
-
-              if (parsedObjects.length > 0) {
-                parsed = parsedObjects;
-                logger.info("Fallback fragment parsing succeeded", {
-                  fragmentsParsed: parsedObjects.length,
-                });
-              } else {
-                throw primaryParseError;
-              }
-            } else {
-              throw primaryParseError;
-            }
-          }
-
-          logger.info("Successfully parsed itemTimeline", {
-            type: typeof parsed,
-            isArray: Array.isArray(parsed),
-            length: Array.isArray(parsed) ? parsed.length : null,
-          });
-
-          if (Array.isArray(parsed)) {
-            itemTimeline = parsed;
-          } else if (parsed && typeof parsed === "object") {
-            // Type guard for object with known properties
-            const parsedObj = parsed as Record<string, unknown>;
-
-            // Columnar format
-            if (Array.isArray(parsedObj.itemId)) {
-              logger.info("Detected columnar format, transposing");
-
-              const length = parsedObj.itemId.length;
-              itemTimeline = [];
-
-              for (let i = 0; i < length; i++) {
-                itemTimeline.push({
-                  itemId: parsedObj.itemId[i] as number,
-                  timestamp: Array.isArray(parsedObj.timestamp)
-                    ? (parsedObj.timestamp[i] as number)
-                    : 0,
-                  cost: Array.isArray(parsedObj.cost)
-                    ? (parsedObj.cost[i] as number)
-                    : 0,
-                });
-              }
-
-              logger.info("Transposed successfully", {
-                resultLength: itemTimeline.length,
-              });
-            } else if (Array.isArray(parsedObj.itemTimeline)) {
-              itemTimeline = parsedObj.itemTimeline as ItemPurchase[];
-            } else if (Array.isArray(parsedObj.items)) {
-              itemTimeline = parsedObj.items as ItemPurchase[];
-            } else if (Array.isArray(parsedObj.data)) {
-              itemTimeline = parsedObj.data as ItemPurchase[];
-            } else {
-              logger.error("No array found in parsed object", {
-                keys: Object.keys(parsedObj),
-              });
-              throw new Error(
-                `Parsed itemTimeline is an object with keys: ${Object.keys(parsedObj).join(", ")}`
-              );
-            }
-          } else {
-            throw new Error(`Unexpected parsed type: ${typeof parsed}`);
-          }
-        } else if (Array.isArray(itemTimelineJson)) {
-          itemTimeline = itemTimelineJson;
-        } else if (itemTimelineJson && typeof itemTimelineJson === "object") {
-          logger.info("itemTimelineJson is already an object", {
-            keys: Object.keys(itemTimelineJson),
-          });
-
-          if (Array.isArray((itemTimelineJson as any).itemId)) {
-            const length = (itemTimelineJson as any).itemId.length;
-            itemTimeline = [];
-
-            for (let i = 0; i < length; i++) {
-              itemTimeline.push({
-                itemId: (itemTimelineJson as any).itemId[i],
-                timestamp: Array.isArray((itemTimelineJson as any).timestamp)
-                  ? (itemTimelineJson as any).timestamp[i]
-                  : 0,
-                cost: Array.isArray((itemTimelineJson as any).cost)
-                  ? (itemTimelineJson as any).cost[i]
-                  : 0,
-              });
-            }
-          } else if (Array.isArray((itemTimelineJson as any).itemTimeline)) {
-            itemTimeline = (itemTimelineJson as any).itemTimeline;
-          } else if (Array.isArray((itemTimelineJson as any).items)) {
-            itemTimeline = (itemTimelineJson as any).items;
-          } else if (Array.isArray((itemTimelineJson as any).data)) {
-            itemTimeline = (itemTimelineJson as any).data;
-          } else {
-            throw new Error(
-              `Object has no array property. Keys: ${Object.keys(itemTimelineJson).join(", ")}`
-            );
-          }
-        } else {
-          throw new Error(
-            `Invalid itemTimelineJson type: ${typeof itemTimelineJson}`
-          );
-        }
-      } catch (parseError: any) {
-        logger.error("Failed to parse itemTimelineJson", {
-          error: parseError.message,
-          stack: parseError.stack,
-          rawType: typeof itemTimelineJson,
-          rawLength:
-            typeof itemTimelineJson === "string"
-              ? itemTimelineJson.length
-              : null,
-        });
-        throw parseError;
-      }
-
-      // ============ PARSE GOLD PER MINUTE ============
-      try {
-        if (typeof goldPerMinuteJson === "string") {
-          let cleaned = goldPerMinuteJson.trim();
-
-          // Handle concatenated JSON objects
-          if (cleaned.startsWith("{") && !cleaned.startsWith("[")) {
-            logger.info("Detected concatenated JSON in goldPerMinute");
-
-            if (!cleaned.endsWith("}")) {
-              const lastCompleteObject = cleaned.lastIndexOf("}");
-              if (lastCompleteObject !== -1) {
-                cleaned = cleaned.substring(0, lastCompleteObject + 1);
-              }
-            }
-            cleaned = `[${cleaned}]`;
-          }
-
-          const parsed = JSON.parse(cleaned);
-
-          logger.info("Successfully parsed goldPerMinute", {
-            type: typeof parsed,
-            isArray: Array.isArray(parsed),
-          });
-
-          if (Array.isArray(parsed)) {
-            goldPerMinute = parsed;
-          } else if (parsed && typeof parsed === "object") {
-            if (Array.isArray(parsed.goldPerMinute)) {
-              goldPerMinute = parsed.goldPerMinute;
-            } else if (Array.isArray(parsed.data)) {
-              goldPerMinute = parsed.data;
-            } else if (Array.isArray(parsed.gold)) {
-              goldPerMinute = parsed.gold;
-            } else {
-              throw new Error(
-                `Parsed goldPerMinute is an object with keys: ${Object.keys(parsed).join(", ")}`
-              );
-            }
-          } else {
-            throw new Error(`Unexpected parsed type: ${typeof parsed}`);
-          }
-        } else if (Array.isArray(goldPerMinuteJson)) {
-          goldPerMinute = goldPerMinuteJson;
-        } else if (goldPerMinuteJson && typeof goldPerMinuteJson === "object") {
-          if (Array.isArray((goldPerMinuteJson as any).goldPerMinute)) {
-            goldPerMinute = (goldPerMinuteJson as any).goldPerMinute;
-          } else if (Array.isArray((goldPerMinuteJson as any).data)) {
-            goldPerMinute = (goldPerMinuteJson as any).data;
-          } else if (Array.isArray((goldPerMinuteJson as any).gold)) {
-            goldPerMinute = (goldPerMinuteJson as any).gold;
-          } else {
-            throw new Error(
-              `Object has no array property. Keys: ${Object.keys(goldPerMinuteJson).join(", ")}`
-            );
-          }
-        } else {
-          throw new Error(
-            `Invalid goldPerMinuteJson type: ${typeof goldPerMinuteJson}`
-          );
-        }
-      } catch (parseError: any) {
-        logger.error("Failed to parse goldPerMinuteJson", {
-          error: parseError.message,
-          stack: parseError.stack,
-          rawType: typeof goldPerMinuteJson,
-        });
-        throw parseError;
-      }
-
-      // ============ VALIDATE ARRAYS ============
+      // Validate arrays
       if (!Array.isArray(itemTimeline)) {
         throw new Error(
           `itemTimeline must be an array, got ${typeof itemTimeline}`
@@ -396,64 +449,29 @@ app.tool<{
         goldDataPoints: goldPerMinute.length,
       });
 
-      // ============ CALCULATE BUILD EFFICIENCY ============
-      // Filter major items (cost >= 1000 gold)
-      const majorItems = itemTimeline.filter((item: any) => item.cost >= 1000);
-
-      // Calculate power spike timings
-      const powerSpikes = majorItems.map((item: any, index: number) => ({
-        itemNumber: index + 1,
-        timestamp: item.timestamp,
-        minute: Math.floor(item.timestamp / 60_000),
-        itemId: item.itemId || 0,
-      }));
-
-      // Calculate gold efficiency
-      const totalGold = goldPerMinute.reduce(
-        (sum: number, gold: number) => sum + gold,
-        0
+      // Calculate build efficiency
+      const result = calculateBuildEfficiency(
+        itemTimeline,
+        goldPerMinute as number[]
       );
-      const goldSpent = itemTimeline.reduce(
-        (sum: number, item: any) => sum + item.cost,
-        0
-      );
-      const efficiency = totalGold > 0 ? (goldSpent / totalGold) * 100 : 0;
-
-      // Calculate average time between major items
-      const avgMinutesBetweenItems =
-        majorItems.length > 1
-          ? (majorItems.at(-1).timestamp - majorItems[0].timestamp) /
-            (majorItems.length - 1) /
-            60_000
-          : 0;
-
-      const result = {
-        efficiency: `${efficiency.toFixed(2)}%`,
-        powerSpikes,
-        avgTimeBetweenMajorItems: `${avgMinutesBetweenItems.toFixed(1)} minutes`,
-        totalGold,
-        goldSpent,
-        itemsPurchased: itemTimeline.length,
-        majorItemsPurchased: majorItems.length,
-      };
 
       tracer.putMetadata("buildEfficiency", result);
       logger.info("Build efficiency analyzed successfully", {
         efficiency: result.efficiency,
-        powerSpikeCount: powerSpikes.length,
+        powerSpikeCount: result.powerSpikes.length,
       });
 
       return result;
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error("Error analyzing build efficiency", {
-        error: error.message,
-        stack: error.stack,
-        errorType: error.constructor.name,
+        error: error instanceof Error ? error.message : "Unknown error",
+        stack: error instanceof Error ? error.stack : undefined,
+        errorType: error instanceof Error ? error.constructor.name : "Unknown",
       });
 
       // Return a user-friendly error response instead of throwing
       return {
-        error: `Build analysis failed: ${error.message}`,
+        error: `Build analysis failed: ${error instanceof Error ? error.message : "Unknown error"}`,
         details: "Please check the input format and try again",
       };
     }
@@ -497,7 +515,7 @@ app.tool<{ currentBuild: number[]; enemyChampions: string[] }>(
         apChampions.some((ap) => champ.toLowerCase().includes(ap.toLowerCase()))
       ).length;
 
-      if (apCount >= 3) {
+      if (apCount >= AP_HEAVY_THRESHOLD) {
         recommendations.push(
           "Enemy has heavy AP damage. Prioritize Magic Resist items: Maw of Malmortius, Banshee's Veil, Force of Nature, or Spirit Visage"
         );
@@ -520,7 +538,7 @@ app.tool<{ currentBuild: number[]; enemyChampions: string[] }>(
         adChampions.some((ad) => champ.toLowerCase().includes(ad.toLowerCase()))
       ).length;
 
-      if (adCount >= 3) {
+      if (adCount >= AD_HEAVY_THRESHOLD) {
         recommendations.push(
           "Enemy has heavy AD damage. Build Armor items: Randuin's Omen, Thornmail, Frozen Heart, or Plated Steelcaps"
         );
@@ -545,7 +563,7 @@ app.tool<{ currentBuild: number[]; enemyChampions: string[] }>(
         )
       ).length;
 
-      if (healCount >= 2) {
+      if (healCount >= HEAL_THRESHOLD) {
         recommendations.push(
           "Multiple healing champions detected. Prioritize Grievous Wounds: Mortal Reminder, Morellonomicon, Chempunk Chainsword, or Thornmail"
         );
@@ -567,7 +585,7 @@ app.tool<{ currentBuild: number[]; enemyChampions: string[] }>(
         )
       ).length;
 
-      if (tankCount >= 2) {
+      if (tankCount >= TANK_THRESHOLD) {
         recommendations.push(
           "Multiple tanks detected. Consider % health damage items: Blade of the Ruined King, Liandry's Torment, or Black Cleaver"
         );
@@ -576,10 +594,10 @@ app.tool<{ currentBuild: number[]; enemyChampions: string[] }>(
       const result = {
         currentBuild,
         enemyComposition: {
-          apHeavy: apCount >= 3,
-          adHeavy: adCount >= 3,
-          healingPresent: healCount >= 2,
-          tankHeavy: tankCount >= 2,
+          apHeavy: apCount >= AP_HEAVY_THRESHOLD,
+          adHeavy: adCount >= AD_HEAVY_THRESHOLD,
+          healingPresent: healCount >= HEAL_THRESHOLD,
+          tankHeavy: tankCount >= TANK_THRESHOLD,
         },
         recommendations:
           recommendations.length > 0
@@ -629,10 +647,22 @@ app.tool<{ championName: string; role: string; rank: string }>(
         role,
         rank,
         optimalBuild: {
-          coreItems: [3078, 3031, 3094], // Placeholder item IDs
-          boots: 3006,
-          situationalItems: [3036, 3033, 3072],
-          startingItems: [1055, 2003, 2003],
+          coreItems: [
+            ITEM_ID_PHANTOM_DANCER,
+            ITEM_ID_INFINITY_EDGE,
+            ITEM_ID_RAPID_FIRECANNON,
+          ], // Placeholder item IDs
+          boots: ITEM_ID_BERSERKER_GREAVES,
+          situationalItems: [
+            ITEM_ID_MORTAL_REMINDER,
+            ITEM_ID_MAW_OF_MALMORTIUS,
+            ITEM_ID_GUARDIAN_ANGEL,
+          ],
+          startingItems: [
+            ITEM_ID_DORANS_BLADE,
+            ITEM_ID_HEALTH_POTION,
+            ITEM_ID_HEALTH_POTION,
+          ],
         },
         winRate: "52.3%",
         sampleSize: 15_420,
@@ -683,13 +713,19 @@ app.tool<{ playerItemsJson: string; championName: string; role: string }>(
       // const metaBuild = await externalAPIClient.getBuildMetaFromUGG(championName, role);
 
       // Placeholder meta build
-      const metaBuild = [3078, 3031, 3094, 3006];
+      const metaBuild = [
+        ITEM_ID_PHANTOM_DANCER,
+        ITEM_ID_INFINITY_EDGE,
+        ITEM_ID_RAPID_FIRECANNON,
+        ITEM_ID_BERSERKER_GREAVES,
+      ];
 
       // Calculate build similarity
       const matchingItems = playerItems.filter((item) =>
         metaBuild.includes(item)
       );
-      const buildSimilarity = (matchingItems.length / metaBuild.length) * 100;
+      const buildSimilarity =
+        (matchingItems.length / metaBuild.length) * PERCENTAGE_MULTIPLIER;
 
       const result = {
         championName,
@@ -703,7 +739,7 @@ app.tool<{ playerItemsJson: string; championName: string; role: string }>(
           (item) => !playerItems.includes(item)
         ),
         recommendation:
-          buildSimilarity >= 75
+          buildSimilarity >= BUILD_SIMILARITY_THRESHOLD
             ? "Build closely follows meta recommendations"
             : "Consider incorporating more meta-optimal items",
         note: "TODO: Integration with U.GG API pending (Task 11.5)",
@@ -756,25 +792,25 @@ app.tool<{ championName: string; enemyChampionsJson: string; role: string }>(
         enemyChampions,
         counterItems: [
           {
-            itemId: 3156,
+            itemId: ITEM_ID_QUICKSILVER_SASH,
             reason: "QSS for CC-heavy composition",
             priority: "High",
           },
           {
-            itemId: 3026,
+            itemId: ITEM_ID_GUARDIAN_ANGEL,
             reason: "Guardian Angel for survivability",
             priority: "Medium",
           },
           {
-            itemId: 3033,
+            itemId: ITEM_ID_MORTAL_REMINDER,
             reason: "Mortal Reminder for healing reduction",
             priority: "High",
           },
         ],
         buildPath: {
-          early: [3006, 3078],
-          mid: [3031, 3156],
-          late: [3094, 3033],
+          early: [ITEM_ID_BERSERKER_GREAVES, ITEM_ID_PHANTOM_DANCER],
+          mid: [ITEM_ID_INFINITY_EDGE, ITEM_ID_MAW_OF_MALMORTIUS],
+          late: [ITEM_ID_RAPID_FIRECANNON, ITEM_ID_MORTAL_REMINDER],
         },
         matchupSpecific: {
           vsAP: "Consider Maw of Malmortius if facing heavy AP damage",
@@ -827,10 +863,16 @@ app.tool<{ matchHistoryJson: string }>(
       const uniqueBuilds = new Set(
         matchHistory.map((m) => m.items.sort().join(","))
       );
-      const adaptationRate = (uniqueBuilds.size / matchHistory.length) * 100;
+      const adaptationRate =
+        (uniqueBuilds.size / matchHistory.length) * PERCENTAGE_MULTIPLIER;
 
       // Check for situational item usage
-      const situationalItems = [3156, 3033, 3026, 3139]; // QSS, Mortal Reminder, GA, Mercurial
+      const situationalItems = [
+        ITEM_ID_QUICKSILVER_SASH,
+        ITEM_ID_MORTAL_REMINDER,
+        ITEM_ID_GUARDIAN_ANGEL,
+        ITEM_ID_MERCURIAL_SCIMITAR,
+      ]; // QSS, Mortal Reminder, GA, Mercurial
       const situationalItemUsage = matchHistory.filter((m) =>
         m.items.some((item) => situationalItems.includes(item))
       ).length;
@@ -841,18 +883,13 @@ app.tool<{ matchHistoryJson: string }>(
         adaptationRate: `${adaptationRate.toFixed(1)}%`,
         situationalItemUsage: {
           count: situationalItemUsage,
-          percentage:
-            ((situationalItemUsage / matchHistory.length) * 100).toFixed(1) +
-            "%",
+          percentage: `${(
+            (situationalItemUsage / matchHistory.length) * PERCENTAGE_MULTIPLIER
+          ).toFixed(1)}%`,
         },
-        rating:
-          adaptationRate >= 60
-            ? "Flexible"
-            : adaptationRate >= 40
-              ? "Moderate"
-              : "Rigid",
+        rating: determineAdaptationRating(adaptationRate),
         recommendation:
-          adaptationRate < 40
+          adaptationRate < WIN_RATE_POOR
             ? "Consider adapting builds more based on enemy composition and game state"
             : "Good build flexibility - continue adapting to match conditions",
         note: "TODO: Enhanced analysis with meta comparison pending (Task 11.5)",
@@ -897,7 +934,7 @@ app.tool<{ itemIdsJson: string }>(
       const efficiencyData = itemIds.map((itemId) => ({
         itemId,
         name: `Item ${itemId}`, // TODO: Get actual name from Data Dragon
-        cost: 3000, // Placeholder
+        cost: PLACEHOLDER_ITEM_GOLD_VALUE, // Placeholder
         goldEfficiency: "105%", // Placeholder
         stats: {
           attackDamage: 50,
@@ -911,7 +948,7 @@ app.tool<{ itemIdsJson: string }>(
         items: efficiencyData,
         averageEfficiency: "103%",
         mostEfficient: efficiencyData[0],
-        leastEfficient: efficiencyData.at(-1),
+        leastEfficient: efficiencyData[efficiencyData.length - 1] ?? null,
         note: "TODO: Integration with Data Dragon API pending (Task 11.5)",
       };
 

@@ -11,6 +11,7 @@ import { Tracer } from "@aws-lambda-powertools/tracer";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, GetCommand } from "@aws-sdk/lib-dynamodb";
 import type { Context } from "aws-lambda";
+import type { RiotTimelineResponse } from "../../shared/types";
 
 const logger = new Logger({ serviceName: "hexcore-temporal-tools" });
 const tracer = new Tracer({ serviceName: "hexcore-temporal-tools" });
@@ -20,6 +21,30 @@ const ddbClient = new DynamoDBClient({});
 const ddb = DynamoDBDocumentClient.from(ddbClient, {
   marshallOptions: { removeUndefinedValues: true },
 });
+
+// Temporal analysis constants
+const LEVEL_2_POWER_SPIKE = 2;
+const LEVEL_6_POWER_SPIKE = 6;
+const LEVEL_11_POWER_SPIKE = 11;
+
+// Phase scoring constants
+const CS_NORMALIZATION_FACTOR = 100;
+const CS_WEIGHT = 40;
+const GOLD_NORMALIZATION_FACTOR = 10_000;
+const GOLD_WEIGHT = 40;
+const LEVEL_NORMALIZATION_FACTOR = 18;
+const LEVEL_WEIGHT = 20;
+
+// Benchmark values
+const EARLY_CS_BENCHMARK = 80;
+const EARLY_GOLD_BENCHMARK = 3500;
+const EARLY_KILLS_BENCHMARK = 1.2;
+const MID_CS_BENCHMARK = 160;
+const MID_GOLD_BENCHMARK = 8000;
+const MID_KILLS_BENCHMARK = 3.5;
+const LATE_CS_BENCHMARK = 240;
+const LATE_GOLD_BENCHMARK = 13_000;
+const LATE_KILLS_BENCHMARK = 6.0;
 
 /**
  * Tool: Get Performance By Game Phase
@@ -51,7 +76,7 @@ app.tool<{ matchId: string; puuid: string; participantId: number }>(
         "../../shared/riot-api"
       );
       const phasePerformance = calculatePhasePerformance(
-        timelineResult.Item as any,
+        timelineResult.Item as RiotTimelineResponse,
         participantId
       );
 
@@ -101,9 +126,11 @@ function calculatePhaseScore(phase: {
   level: number;
 }): number {
   // Simple scoring: normalize CS and gold
-  const csScore = Math.min(phase.cs / 100, 1) * 40;
-  const goldScore = Math.min(phase.gold / 10_000, 1) * 40;
-  const levelScore = Math.min(phase.level / 18, 1) * 20;
+  const csScore = Math.min(phase.cs / CS_NORMALIZATION_FACTOR, 1) * CS_WEIGHT;
+  const goldScore =
+    Math.min(phase.gold / GOLD_NORMALIZATION_FACTOR, 1) * GOLD_WEIGHT;
+  const levelScore =
+    Math.min(phase.level / LEVEL_NORMALIZATION_FACTOR, 1) * LEVEL_WEIGHT;
   return Math.round(csScore + goldScore + levelScore);
 }
 
@@ -162,9 +189,9 @@ app.tool<{ matchId: string; puuid: string; championName: string }>(
         puuid,
         championName,
         powerSpikes: [
-          { level: 2, utilized: false, impact: "Low" },
-          { level: 6, utilized: false, impact: "Medium" },
-          { level: 11, utilized: false, impact: "High" },
+          { level: LEVEL_2_POWER_SPIKE, utilized: false, impact: "Low" },
+          { level: LEVEL_6_POWER_SPIKE, utilized: false, impact: "Medium" },
+          { level: LEVEL_11_POWER_SPIKE, utilized: false, impact: "High" },
         ],
         itemPowerSpikes: [],
         utilizationScore: 0,
@@ -254,19 +281,19 @@ app.tool<{ championName: string; role: string; rank: string }>(
         role,
         rank,
         earlyGameBenchmarks: {
-          csAt10: 80,
-          goldAt10: 3500,
-          expectedKills: 1.2,
+          csAt10: EARLY_CS_BENCHMARK,
+          goldAt10: EARLY_GOLD_BENCHMARK,
+          expectedKills: EARLY_KILLS_BENCHMARK,
         },
         midGameBenchmarks: {
-          csAt20: 160,
-          goldAt20: 8000,
-          expectedKills: 3.5,
+          csAt20: MID_CS_BENCHMARK,
+          goldAt20: MID_GOLD_BENCHMARK,
+          expectedKills: MID_KILLS_BENCHMARK,
         },
         lateGameBenchmarks: {
-          csAt30: 240,
-          goldAt30: 13_000,
-          expectedKills: 6.0,
+          csAt30: LATE_CS_BENCHMARK,
+          goldAt30: LATE_GOLD_BENCHMARK,
+          expectedKills: LATE_KILLS_BENCHMARK,
         },
         source: "placeholder",
         note: "TODO: Integration with U.GG/LoLalytics API pending (Task 11.5)",

@@ -19,6 +19,138 @@ const app = new BedrockAgentFunctionResolver({ logger });
 const ddbClient = new DynamoDBClient({});
 const ddb = DynamoDBDocumentClient.from(ddbClient);
 
+// Mastery thresholds
+const MASTERY_MASTER_THRESHOLD = 100;
+const MASTERY_ADVANCED_THRESHOLD = 50;
+const MASTERY_INTERMEDIATE_THRESHOLD = 20;
+
+// Performance consistency thresholds
+const HIGH_WIN_RATE_THRESHOLD = 55;
+const HIGH_KDA_THRESHOLD = 3.0;
+const AVERAGE_WIN_RATE_THRESHOLD = 48;
+const AVERAGE_KDA_THRESHOLD = 2.0;
+
+// Insight generation thresholds
+const INSIGHT_EXPERIENCE_THRESHOLD = 20;
+const STRONG_WIN_RATE_THRESHOLD = 55;
+const WEAK_WIN_RATE_THRESHOLD = 45;
+const EXCELLENT_KDA_THRESHOLD = 3.5;
+const LOW_KDA_THRESHOLD = 2.0;
+const SIGNIFICANT_EXPERIENCE_THRESHOLD = 50;
+const BELOW_AVERAGE_WIN_RATE_THRESHOLD = 48;
+
+// Global benchmark values
+const BENCHMARK_WIN_RATE = 50.0;
+const BENCHMARK_KDA = 2.5;
+const BENCHMARK_CS_PER_MINUTE = 7.0;
+const BENCHMARK_VISION_SCORE = 30.0;
+
+// Learning curve ratings
+const MECHANICAL_SKILL_RATING = 6.5;
+const GAME_KNOWLEDGE_RATING = 7.0;
+const BASIC_MECHANICS_GAMES = 10;
+const FUNDAMENTALS_GAMES = 30;
+const ADVANCED_POSITIONING_GAMES = 50;
+const MASTERY_GAMES = 100;
+
+// Meta alignment threshold
+const META_ALIGNMENT_THRESHOLD = 50;
+
+// Additional constants
+const PERCENTAGE_MULTIPLIER = 100;
+const MAX_SUGGESTED_ADDITIONS = 3;
+
+/**
+ * Helper: Determine mastery level based on games played
+ */
+function determineMasteryLevel(
+  gamesPlayed: number
+): "Beginner" | "Intermediate" | "Advanced" | "Master" {
+  if (gamesPlayed >= MASTERY_MASTER_THRESHOLD) {
+    return "Master";
+  }
+  if (gamesPlayed >= MASTERY_ADVANCED_THRESHOLD) {
+    return "Advanced";
+  }
+  if (gamesPlayed >= MASTERY_INTERMEDIATE_THRESHOLD) {
+    return "Intermediate";
+  }
+  return "Beginner";
+}
+
+/**
+ * Helper: Determine performance consistency
+ */
+function determinePerformanceConsistency(
+  winRate: number,
+  avgKda: number
+): "Highly Consistent" | "Consistent" | "Inconsistent" {
+  if (winRate >= HIGH_WIN_RATE_THRESHOLD && avgKda >= HIGH_KDA_THRESHOLD) {
+    return "Highly Consistent";
+  }
+  if (
+    winRate >= AVERAGE_WIN_RATE_THRESHOLD &&
+    avgKda >= AVERAGE_KDA_THRESHOLD
+  ) {
+    return "Consistent";
+  }
+  return "Inconsistent";
+}
+
+/**
+ * Helper: Generate champion mastery insights
+ */
+function generateChampionInsights(params: {
+  champion: string;
+  gamesPlayed: number;
+  winRate: number;
+  avgKda: number;
+}): string[] {
+  const { champion, gamesPlayed, winRate, avgKda } = params;
+  const insights: string[] = [];
+
+  if (gamesPlayed < INSIGHT_EXPERIENCE_THRESHOLD) {
+    insights.push(
+      `Limited experience with ${champion}. Continue practicing to build mastery and understanding of power spikes`
+    );
+  }
+
+  if (winRate >= STRONG_WIN_RATE_THRESHOLD) {
+    insights.push(
+      `Strong win rate on ${champion} (${winRate.toFixed(1)}%). This champion is a good fit for your playstyle`
+    );
+  } else if (winRate < WEAK_WIN_RATE_THRESHOLD) {
+    insights.push(
+      `Below average win rate on ${champion}. Consider reviewing VODs or seeking coaching for improvement`
+    );
+  }
+
+  if (avgKda >= EXCELLENT_KDA_THRESHOLD) {
+    insights.push(
+      "Excellent KDA performance showing strong mechanical execution"
+    );
+  } else if (avgKda < LOW_KDA_THRESHOLD) {
+    insights.push(
+      "Low KDA suggests difficulty with champion mechanics or decision-making"
+    );
+  }
+
+  if (
+    gamesPlayed >= SIGNIFICANT_EXPERIENCE_THRESHOLD &&
+    winRate < BELOW_AVERAGE_WIN_RATE_THRESHOLD
+  ) {
+    insights.push(
+      `Despite significant experience (${gamesPlayed} games), win rate remains below 50%. Consider focusing on other champions or specific skill areas`
+    );
+  }
+
+  return insights.length > 0
+    ? insights
+    : [
+        `Solid performance on ${champion}. Continue refining mechanics and game knowledge`,
+      ];
+}
+
 /**
  * Tool: Get Champion Performance
  *
@@ -98,73 +230,20 @@ app.tool<{
     });
 
     try {
-      // Determine mastery level based on games played
-      let masteryLevel: "Beginner" | "Intermediate" | "Advanced" | "Master";
-
-      if (gamesPlayed >= 100) {
-        masteryLevel = "Master";
-      } else if (gamesPlayed >= 50) {
-        masteryLevel = "Advanced";
-      } else if (gamesPlayed >= 20) {
-        masteryLevel = "Intermediate";
-      } else {
-        masteryLevel = "Beginner";
-      }
-
-      // Determine performance consistency
-      let performanceConsistency:
-        | "Highly Consistent"
-        | "Consistent"
-        | "Inconsistent";
-
-      if (winRate >= 55 && avgKda >= 3.0) {
-        performanceConsistency = "Highly Consistent";
-      } else if (winRate >= 48 && avgKda >= 2.0) {
-        performanceConsistency = "Consistent";
-      } else {
-        performanceConsistency = "Inconsistent";
-      }
+      // Determine mastery level and performance consistency
+      const masteryLevel = determineMasteryLevel(gamesPlayed);
+      const performanceConsistency = determinePerformanceConsistency(
+        winRate,
+        avgKda
+      );
 
       // Generate insights
-      const insights: string[] = [];
-
-      if (gamesPlayed < 20) {
-        insights.push(
-          `Limited experience with ${champion}. Continue practicing to build mastery and understanding of power spikes`
-        );
-      }
-
-      if (winRate >= 55) {
-        insights.push(
-          `Strong win rate on ${champion} (${winRate.toFixed(1)}%). This champion is a good fit for your playstyle`
-        );
-      } else if (winRate < 45) {
-        insights.push(
-          `Below average win rate on ${champion}. Consider reviewing VODs or seeking coaching for improvement`
-        );
-      }
-
-      if (avgKda >= 3.5) {
-        insights.push(
-          "Excellent KDA performance showing strong mechanical execution"
-        );
-      } else if (avgKda < 2.0) {
-        insights.push(
-          "Low KDA suggests difficulty with champion mechanics or decision-making"
-        );
-      }
-
-      if (gamesPlayed >= 50 && winRate < 48) {
-        insights.push(
-          `Despite significant experience (${gamesPlayed} games), win rate remains below 50%. Consider focusing on other champions or specific skill areas`
-        );
-      }
-
-      if (insights.length === 0) {
-        insights.push(
-          `Solid performance on ${champion}. Continue refining mechanics and game knowledge`
-        );
-      }
+      const insights = generateChampionInsights({
+        champion,
+        gamesPlayed,
+        winRate,
+        avgKda,
+      });
 
       const result = {
         champion,
@@ -220,10 +299,10 @@ app.tool<{
     try {
       // Global benchmark data (these would ideally come from a database)
       const globalBenchmarks = {
-        winRate: 50.0,
-        avgKda: 2.5,
-        csPerMinute: 7.0,
-        visionScore: 30.0,
+        winRate: BENCHMARK_WIN_RATE,
+        avgKda: BENCHMARK_KDA,
+        csPerMinute: BENCHMARK_CS_PER_MINUTE,
+        visionScore: BENCHMARK_VISION_SCORE,
       };
 
       // Calculate performance vs benchmark
@@ -571,8 +650,8 @@ app.tool<{ championName: string; role: string }>(
         championName,
         role,
         difficulty: "Medium",
-        mechanicalSkillRequired: 6.5,
-        gameKnowledgeRequired: 7.0,
+        mechanicalSkillRequired: MECHANICAL_SKILL_RATING,
+        gameKnowledgeRequired: GAME_KNOWLEDGE_RATING,
         learningCurve: {
           games1to10: {
             avgWinRate: "45.2%",
@@ -592,10 +671,22 @@ app.tool<{ championName: string; role: string }>(
           },
         },
         masteryMilestones: [
-          { games: 10, milestone: "Basic mechanics and ability usage" },
-          { games: 30, milestone: "Power spike timing and matchup knowledge" },
-          { games: 50, milestone: "Advanced positioning and team fighting" },
-          { games: 100, milestone: "Champion mastery and optimization" },
+          {
+            games: BASIC_MECHANICS_GAMES,
+            milestone: "Basic mechanics and ability usage",
+          },
+          {
+            games: FUNDAMENTALS_GAMES,
+            milestone: "Power spike timing and matchup knowledge",
+          },
+          {
+            games: ADVANCED_POSITIONING_GAMES,
+            milestone: "Advanced positioning and team fighting",
+          },
+          {
+            games: MASTERY_GAMES,
+            milestone: "Champion mastery and optimization",
+          },
         ],
         recommendation:
           "Medium difficulty champion - expect 30-50 games to reach proficiency",
@@ -668,7 +759,8 @@ app.tool<{ championsJson: string; role: string; rank: string }>(
       const metaChampions = poolAnalysis.filter(
         (p) => p.tier === "S" || p.tier === "A"
       ).length;
-      const metaAlignment = (metaChampions / champions.length) * 100;
+      const metaAlignment =
+        (metaChampions / champions.length) * PERCENTAGE_MULTIPLIER;
 
       const result = {
         role,
@@ -679,7 +771,7 @@ app.tool<{ championsJson: string; role: string; rank: string }>(
         metaAlignment: `${metaAlignment.toFixed(1)}%`,
         metaChampionsInPool: metaChampions,
         recommendations:
-          metaAlignment < 50
+          metaAlignment < META_ALIGNMENT_THRESHOLD
             ? [
                 "Consider adding more meta-relevant champions to your pool",
                 "Focus on S and A tier champions for better climb efficiency",
@@ -690,7 +782,7 @@ app.tool<{ championsJson: string; role: string; rank: string }>(
               ],
         suggestedAdditions: metaTiers.S.filter(
           (champ) => !champions.includes(champ)
-        ).slice(0, 3),
+        ).slice(0, MAX_SUGGESTED_ADDITIONS),
         note: "TODO: Integration with U.GG API pending (Task 11.5)",
       };
 

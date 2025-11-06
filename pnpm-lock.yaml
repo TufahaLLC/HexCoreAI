@@ -38,9 +38,6 @@ importers:
       '@aws-lambda-powertools/metrics':
         specifier: 2.26.1
         version: 2.26.1
-      '@aws-lambda-powertools/parser':
-        specifier: ^2.27.0
-        version: 2.27.0(zod@3.25.76)
       '@aws-lambda-powertools/tracer':
         specifier: 2.26.1
         version: 2.26.1
@@ -85,7 +82,7 @@ importers:
         specifier: ^24.6.2
         version: 24.6.2
       rimraf:
-        specifier: ^5.0.5
+        specifier: ^5.0.10
         version: 5.0.10
       typescript:
         specifier: ^5.9.3
@@ -175,6 +172,9 @@ importers:
       react-dom:
         specifier: 19.2.0
         version: 19.2.0(react@19.2.0)
+      react-use-websocket:
+        specifier: ^4.13.0
+        version: 4.13.0
       sonner:
         specifier: ^2.0.7
         version: 2.0.7(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
@@ -184,6 +184,9 @@ importers:
       tw-animate-css:
         specifier: ^1.4.0
         version: 1.4.0
+      uuid:
+        specifier: ^13.0.0
+        version: 13.0.0
       zod:
         specifier: ^4.1.11
         version: 4.1.11
@@ -291,17 +294,6 @@ packages:
       '@middy/core': 4.x || 5.x || 6.x
     peerDependenciesMeta:
       '@middy/core':
-        optional: true
-
-  '@aws-lambda-powertools/parser@2.27.0':
-    resolution: {integrity: sha512-mCY04MZFj4YwhJtBfwbsUZ5lqunRHZpqOJBxsjBB6BRo1yNDFYRLbdSA8i482XlbjBYaSMQl6oTwUN5GcjiuCA==}
-    peerDependencies:
-      '@middy/core': 4.x || 5.x || 6.x
-      zod: 4.x
-    peerDependenciesMeta:
-      '@middy/core':
-        optional: true
-      zod:
         optional: true
 
   '@aws-lambda-powertools/tracer@2.26.1':
@@ -3690,6 +3682,9 @@ packages:
       '@types/react':
         optional: true
 
+  react-use-websocket@4.13.0:
+    resolution: {integrity: sha512-anMuVoV//g2N76Wxqvqjjo1X48r9Np3y1/gMl7arX84tAPXdy5R7sB5lO5hvCzQRYjqXwV8XMAiEBOUbyrZFrw==}
+
   react@19.2.0:
     resolution: {integrity: sha512-tmbWg6W31tQLeB5cdIBOicJDJRR2KzXsV7uSK9iNfLWQ5bIZfxuPEHp7M8wiHyHnn0DD1i7w3Zmin0FtkrwoCQ==}
     engines: {node: '>=0.10.0'}
@@ -4065,6 +4060,10 @@ packages:
   util-deprecate@1.0.2:
     resolution: {integrity: sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==}
 
+  uuid@13.0.0:
+    resolution: {integrity: sha512-XQegIaBTVUjSHliKqcnFqYypAd4S+WCYt5NIeRs6w/UAry7z8Y9j5ZwRRL4kzq9U3sD6v+85er9FvkEaBpji2w==}
+    hasBin: true
+
   uuid@9.0.1:
     resolution: {integrity: sha512-b+1eJOlsR9K8HJpow9Ok3fiWOWSIcIzXodvv0rQjVoOVNpWMpxf1wZNpt4y9h10odCNrqnYp1OBzRktckBe3sA==}
     hasBin: true
@@ -4271,13 +4270,6 @@ snapshots:
   '@aws-lambda-powertools/metrics@2.26.1':
     dependencies:
       '@aws-lambda-powertools/commons': 2.26.1
-
-  '@aws-lambda-powertools/parser@2.27.0(zod@3.25.76)':
-    dependencies:
-      '@aws-lambda-powertools/commons': 2.27.0
-      '@standard-schema/spec': 1.0.0
-    optionalDependencies:
-      zod: 3.25.76
 
   '@aws-lambda-powertools/tracer@2.26.1':
     dependencies:
@@ -9579,6 +9571,8 @@ snapshots:
     optionalDependencies:
       '@types/react': 19.2.0
 
+  react-use-websocket@4.13.0: {}
+
   react@19.2.0: {}
 
   readdirp@4.1.2: {}
@@ -10039,6 +10033,8 @@ snapshots:
       react: 19.2.0
 
   util-deprecate@1.0.2: {}
+
+  uuid@13.0.0: {}
 
   uuid@9.0.1: {}
 

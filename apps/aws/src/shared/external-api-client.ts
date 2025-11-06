@@ -13,8 +13,45 @@ import {
   PutCommand,
 } from "@aws-sdk/lib-dynamodb";
 import axios, { type AxiosInstance } from "axios";
+import {
+  CACHE_TTL_MULTIPLIER,
+  COMMUNITY_DRAGON_PRIORITY,
+  DATA_DRAGON_PRIORITY,
+  DEFAULT_CHAMPION_ID,
+  DEFAULT_CONFIDENCE,
+  DEFAULT_PICK_RATE,
+  DEFAULT_RANK_TIER,
+  DEFAULT_WIN_RATE,
+  DYNAMODB_TTL_DIVISOR,
+  ITEM_INFINITY_EDGE,
+  ITEM_RAPID_FIRECANNON,
+  ITEM_STATIKK_SHIV,
+  JUNGLE_JUNGLE_TIME_BENCHMARK,
+  JUNGLE_ROAM_BENCHMARK,
+  KEYSSTONE_PRESSOR,
+  LOLALYTICS_PRIORITY,
+  MAP_COVERAGE_BENCHMARK,
+  MAX_JITTER_MS,
+  MIDDLE_ROAM_BENCHMARK,
+  OBJECTIVE_SETUP_TIME_BENCHMARK,
+  OPGG_PRIORITY,
+  OTHER_JUNGLE_TIME_BENCHMARK,
+  OTHER_ROAM_BENCHMARK,
+  PERK_LEGEND_ALACRITY,
+  PERK_OVERHEAL,
+  PERK_SUDDEN_IMPACT,
+  PERK_TREASURE_HUNTER,
+  PERK_TRIUMPH,
+  RECALL_FREQUENCY_BENCHMARK,
+  STAT_SHARD_ADAPTIVE,
+  STAT_SHARD_MAGIC_RESIST,
+  TOP_ITEMS_LIMIT,
+  UGG_PRIORITY,
+} from "./constants";
 
 const logger = new Logger({ serviceName: "external-api-client" });
+
+// Initialize DynamoDB client
 const ddbClient = new DynamoDBClient({});
 const ddb = DynamoDBDocumentClient.from(ddbClient, {
   marshallOptions: { removeUndefinedValues: true },
@@ -42,27 +79,31 @@ const API_CONFIG = {
 const CACHE_TTL = 86_400; // 24 hours in seconds
 const MAX_RETRIES = 3;
 const INITIAL_RETRY_DELAY = 1000; // 1 second
-const MAX_RETRY_DELAY = 10_000; // 10 seconds
+const LOCAL_MAX_RETRY_DELAY = 10_000; // 10 seconds
 const CIRCUIT_BREAKER_THRESHOLD = 5; // failures before opening circuit
 const CIRCUIT_BREAKER_TIMEOUT = 60_000; // 1 minute before attempting reset
 
 // ==================== Circuit Breaker ====================
-enum CircuitState {
-  CLOSED = "CLOSED",
-  OPEN = "OPEN",
-  HALF_OPEN = "HALF_OPEN",
-}
+const CircuitState = {
+  CLOSED: "CLOSED",
+  OPEN: "OPEN",
+  HALF_OPEN: "HALF_OPEN",
+} as const;
+
+type CircuitState = (typeof CircuitState)[keyof typeof CircuitState];
 
 class CircuitBreaker {
+  private readonly threshold: number;
+  private readonly timeout: number;
   private state: CircuitState = CircuitState.CLOSED;
   private failureCount = 0;
   private lastFailureTime = 0;
   private successCount = 0;
 
-  constructor(
-    private readonly threshold: number,
-    private readonly timeout: number
-  ) {}
+  constructor(threshold: number, timeout: number) {
+    this.threshold = threshold;
+    this.timeout = timeout;
+  }
 
   async execute<T>(operation: () => Promise<T>): Promise<T> {
     if (this.state === CircuitState.OPEN) {
@@ -178,8 +219,11 @@ async function retryWithBackoff<T>(
       lastError = error as Error;
 
       if (attempt < maxRetries) {
-        const delay = Math.min(initialDelay * 2 ** attempt, MAX_RETRY_DELAY);
-        const jitter = Math.random() * 200; // Add jitter to prevent thundering herd
+        const delay = Math.min(
+          initialDelay * 2 ** attempt,
+          LOCAL_MAX_RETRY_DELAY
+        );
+        const jitter = Math.random() * MAX_JITTER_MS; // Add jitter to prevent thundering herd
         const totalDelay = delay + jitter;
 
         logger.warn("Retry attempt", {
@@ -240,7 +284,11 @@ export class ExternalAPIClient {
         new CircuitBreaker(CIRCUIT_BREAKER_THRESHOLD, CIRCUIT_BREAKER_TIMEOUT)
       );
     }
-    return this.circuitBreakers.get(key)!;
+    const circuitBreaker = this.circuitBreakers.get(key);
+    if (!circuitBreaker) {
+      throw new Error(`Circuit breaker not found for key: ${key}`);
+    }
+    return circuitBreaker;
   }
 
   // ==================== Caching Layer ====================
@@ -283,7 +331,7 @@ export class ExternalAPIClient {
     metadata: ExternalDataSource
   ): Promise<void> {
     try {
-      const expiresAt = Date.now() + CACHE_TTL * 1000;
+      const expiresAt = Date.now() + CACHE_TTL * CACHE_TTL_MULTIPLIER;
 
       await ddb.send(
         new PutCommand({
@@ -293,7 +341,7 @@ export class ExternalAPIClient {
             data,
             metadata,
             expiresAt,
-            ttl: Math.floor(expiresAt / 1000), // DynamoDB TTL
+            ttl: Math.floor(expiresAt / DYNAMODB_TTL_DIVISOR), // DynamoDB TTL
           },
         })
       );
@@ -476,10 +524,10 @@ export class ExternalAPIClient {
       source: "ugg",
       timestamp: Date.now(),
       region,
-      championId: 0,
+      championId: DEFAULT_CHAMPION_ID,
       championName,
       role,
-      tier: "A",
+      tier: DEFAULT_RANK_TIER,
       winRate: 51.5,
       pickRate: 8.2,
       banRate: 3.5,
@@ -513,19 +561,26 @@ export class ExternalAPIClient {
     const buildData: BuildMetaData = {
       source: "ugg",
       timestamp: Date.now(),
-      championId: 0,
+      championId: DEFAULT_CHAMPION_ID,
       role,
-      coreItems: [3031, 3094, 3087], // Example: IE, RFC, Statikk
-      winRate: 52.3,
-      pickRate: 15.7,
+      coreItems: [ITEM_INFINITY_EDGE, ITEM_RAPID_FIRECANNON, ITEM_STATIKK_SHIV], // Example: IE, RFC, Statikk
+      winRate: DEFAULT_WIN_RATE,
+      pickRate: DEFAULT_PICK_RATE,
       runes: {
         primary: {
           tree: "Precision",
-          keystone: 8005,
-          perks: [9111, 9103, 8014],
+          keystone: KEYSSTONE_PRESSOR,
+          perks: [PERK_OVERHEAL, PERK_TRIUMPH, PERK_LEGEND_ALACRITY],
         },
-        secondary: { tree: "Domination", perks: [8139, 8135] },
-        statShards: [5008, 5008, 5002],
+        secondary: {
+          tree: "Domination",
+          perks: [PERK_SUDDEN_IMPACT, PERK_TREASURE_HUNTER],
+        },
+        statShards: [
+          STAT_SHARD_ADAPTIVE,
+          STAT_SHARD_ADAPTIVE,
+          STAT_SHARD_MAGIC_RESIST,
+        ],
       },
       skillOrder: ["Q", "W", "E", "Q", "Q"],
     };
@@ -581,13 +636,24 @@ export class ExternalAPIClient {
     });
 
     // TODO: Implement actual data fetching
+    let averageRoamsPerGame: number;
+    if (role === "JUNGLE") {
+      averageRoamsPerGame = JUNGLE_ROAM_BENCHMARK;
+    } else if (role === "MIDDLE") {
+      averageRoamsPerGame = MIDDLE_ROAM_BENCHMARK;
+    } else {
+      averageRoamsPerGame = OTHER_ROAM_BENCHMARK;
+    }
+
     const benchmarks = {
-      averageRoamsPerGame:
-        role === "JUNGLE" ? 8.5 : role === "MIDDLE" ? 3.2 : 1.5,
-      averageMapCoverageScore: 72.3,
-      optimalRecallFrequency: 5.2,
-      timeSpentInEnemyJungle: role === "JUNGLE" ? 18.5 : 5.2,
-      objectiveSetupArrivalTime: -45,
+      averageRoamsPerGame,
+      averageMapCoverageScore: MAP_COVERAGE_BENCHMARK,
+      optimalRecallFrequency: RECALL_FREQUENCY_BENCHMARK,
+      timeSpentInEnemyJungle:
+        role === "JUNGLE"
+          ? JUNGLE_JUNGLE_TIME_BENCHMARK
+          : OTHER_JUNGLE_TIME_BENCHMARK,
+      objectiveSetupArrivalTime: OBJECTIVE_SETUP_TIME_BENCHMARK,
     };
 
     await this.setCache(cacheKey, benchmarks, {
@@ -697,7 +763,7 @@ export function normalizeBuildData(
   // Sort by frequency and take top items
   const normalizedItems = Array.from(itemFrequency.entries())
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 6)
+    .slice(0, TOP_ITEMS_LIMIT)
     .map(([item]) => item);
 
   // Confidence based on agreement between sources
@@ -727,17 +793,17 @@ export function resolveDataConflict<T>(
     return {
       value: sources[0].value,
       source: sources[0].source,
-      confidence: sources[0].confidence || 0.8,
+      confidence: sources[0].confidence || DEFAULT_CONFIDENCE,
     };
   }
 
   // Priority order: ugg > lolalytics > opgg > data_dragon > community_dragon
   const sourcePriority: Record<string, number> = {
-    ugg: 5,
-    lolalytics: 4,
-    opgg: 3,
-    data_dragon: 2,
-    community_dragon: 1,
+    ugg: UGG_PRIORITY,
+    lolalytics: LOLALYTICS_PRIORITY,
+    opgg: OPGG_PRIORITY,
+    data_dragon: DATA_DRAGON_PRIORITY,
+    community_dragon: COMMUNITY_DRAGON_PRIORITY,
   };
 
   // Sort by priority, then by timestamp (newer first), then by confidence
@@ -760,7 +826,7 @@ export function resolveDataConflict<T>(
   return {
     value: winner.value,
     source: winner.source,
-    confidence: winner.confidence || 0.8,
+    confidence: winner.confidence || DEFAULT_CONFIDENCE,
   };
 }
 

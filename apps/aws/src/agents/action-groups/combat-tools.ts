@@ -11,6 +11,23 @@ import { Tracer } from "@aws-lambda-powertools/tracer";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, GetCommand } from "@aws-sdk/lib-dynamodb";
 import type { Context } from "aws-lambda";
+import {
+  ASSIST_TO_KILL_RATIO,
+  DAMAGE_RATIO_EXCELLENT,
+  DAMAGE_RATIO_GOOD,
+  HIGH_DEATH_THRESHOLD,
+  KDA_A_TIER,
+  KDA_B_TIER,
+  KDA_S_TIER,
+  KILL_PARTICIPATION_AVERAGE,
+  KILL_PARTICIPATION_EXCELLENT,
+  LOW_DEATH_THRESHOLD,
+  MAGIC_DAMAGE_HEAVY_THRESHOLD,
+  MIN_ASSIST_THRESHOLD,
+  MIN_TOTAL_DAMAGE_OUTPUT,
+  PERCENTAGE_MULTIPLIER,
+  PHYSICAL_DAMAGE_HEAVY_THRESHOLD,
+} from "../../shared/constants";
 
 const logger = new Logger({ serviceName: "hexcore-combat-tools" });
 const tracer = new Tracer({ serviceName: "hexcore-combat-tools" });
@@ -20,6 +37,132 @@ const ddbClient = new DynamoDBClient({});
 const ddb = DynamoDBDocumentClient.from(ddbClient, {
   marshallOptions: { removeUndefinedValues: true },
 });
+
+/**
+ * Helper: Extract damage data structure
+ */
+function extractDamageData(damageData: unknown) {
+  const data = damageData as
+    | { physical?: number; magic?: number; true?: number; total?: number }
+    | undefined;
+  return {
+    physical: data?.physical || 0,
+    magic: data?.magic || 0,
+    true: data?.true || 0,
+    total: data?.total || 0,
+  };
+}
+
+/**
+ * Helper: Determine KDA performance rating
+ */
+function determinePerformanceRating(
+  kdaRatio: number
+): "S-Tier" | "A-Tier" | "B-Tier" | "C-Tier" {
+  if (kdaRatio >= KDA_S_TIER) {
+    return "S-Tier";
+  }
+  if (kdaRatio >= KDA_A_TIER) {
+    return "A-Tier";
+  }
+  if (kdaRatio >= KDA_B_TIER) {
+    return "B-Tier";
+  }
+  return "C-Tier";
+}
+
+/**
+ * Helper: Identify teamfight strengths
+ */
+function identifyTeamfightStrengths(params: {
+  kdaRatio: number;
+  killParticipation: number;
+  deaths: number;
+  assists: number;
+  kills: number;
+}): string[] {
+  const { kdaRatio, killParticipation, deaths, assists, kills } = params;
+  const strengths: string[] = [];
+
+  if (kdaRatio >= KDA_A_TIER) {
+    strengths.push("Excellent KDA ratio showing strong combat performance");
+  }
+
+  if (killParticipation >= KILL_PARTICIPATION_EXCELLENT) {
+    strengths.push(
+      "High kill participation - actively involved in team objectives"
+    );
+  }
+
+  if (deaths <= LOW_DEATH_THRESHOLD) {
+    strengths.push("Good survivability - minimizing deaths effectively");
+  }
+
+  if (assists >= kills * ASSIST_TO_KILL_RATIO) {
+    strengths.push(
+      "Strong team support - contributing significantly to assists"
+    );
+  }
+
+  return strengths.length > 0
+    ? strengths
+    : ["Consistent performance in teamfights"];
+}
+
+/**
+ * Helper: Identify teamfight improvements
+ */
+function identifyTeamfightImprovements(params: {
+  deaths: number;
+  killParticipation: number;
+  kdaRatio: number;
+  kills: number;
+  assists: number;
+}): string[] {
+  const { deaths, killParticipation, kdaRatio, kills, assists } = params;
+  const improvements: string[] = [];
+
+  if (deaths >= HIGH_DEATH_THRESHOLD) {
+    improvements.push(
+      "High death count. Focus on positioning and map awareness to reduce deaths"
+    );
+  }
+
+  if (killParticipation < KILL_PARTICIPATION_AVERAGE) {
+    improvements.push(
+      "Low kill participation. Be more present during teamfights and skirmishes"
+    );
+  }
+
+  if (kdaRatio < KDA_B_TIER && deaths > kills) {
+    improvements.push(
+      "Negative KDA trend. Review combat engagements and focus on safer trading patterns"
+    );
+  }
+
+  if (assists < MIN_ASSIST_THRESHOLD) {
+    improvements.push(
+      "Limited assist contribution. Look for opportunities to support teammates in fights"
+    );
+  }
+
+  return improvements.length > 0
+    ? improvements
+    : ["Maintain current teamfight approach and execution"];
+}
+
+/**
+ * Helper function to get damage priority by role
+ */
+function getDamagePriority(role: string): "High" | "Medium" | "Low" {
+  if (role === "BOTTOM" || role === "MIDDLE") {
+    return "High";
+  }
+  if (role === "UTILITY") {
+    return "Low";
+  }
+  return "Medium";
+}
 
 /**
  * Tool: Get Match Combat Data
@@ -63,18 +206,8 @@ app.tool<{ matchId: string; puuid: string }>(
         kills: combatData?.kills || 0,
         deaths: combatData?.deaths || 0,
         assists: combatData?.assists || 0,
-        damageDealt: {
-          physical: combatData?.damageDealt?.physical || 0,
-          magic: combatData?.damageDealt?.magic || 0,
-          true: combatData?.damageDealt?.true || 0,
-          total: combatData?.damageDealt?.total || 0,
-        },
-        damageReceived: {
-          physical: combatData?.damageReceived?.physical || 0,
-          magic: combatData?.damageReceived?.magic || 0,
-          true: combatData?.damageReceived?.true || 0,
-          total: combatData?.damageReceived?.total || 0,
-        },
+        damageDealt: extractDamageData(combatData?.damageDealt),
+        damageReceived: extractDamageData(combatData?.damageReceived),
       };
     } catch (error) {
       logger.error("Error fetching combat data", { error, matchId, puuid });
@@ -122,15 +255,15 @@ app.tool<{
       const damageBreakdown = {
         physical:
           totalDealt > 0
-            ? `${((damageDealt.physical / totalDealt) * 100).toFixed(1)}%`
+            ? `${((damageDealt.physical / totalDealt) * PERCENTAGE_MULTIPLIER).toFixed(1)}%`
             : "0%",
         magic:
           totalDealt > 0
-            ? `${((damageDealt.magic / totalDealt) * 100).toFixed(1)}%`
+            ? `${((damageDealt.magic / totalDealt) * PERCENTAGE_MULTIPLIER).toFixed(1)}%`
             : "0%",
         true_damage:
           totalDealt > 0
-            ? `${((damageDealt.true / totalDealt) * 100).toFixed(1)}%`
+            ? `${((damageDealt.true / totalDealt) * PERCENTAGE_MULTIPLIER).toFixed(1)}%`
             : "0%",
       };
 
@@ -138,9 +271,9 @@ app.tool<{
       const damageRatio = totalReceived > 0 ? totalDealt / totalReceived : 0;
       let rating: "Excellent" | "Good" | "Needs Improvement";
 
-      if (damageRatio >= 1.5) {
+      if (damageRatio >= DAMAGE_RATIO_EXCELLENT) {
         rating = "Excellent";
-      } else if (damageRatio >= 1.0) {
+      } else if (damageRatio >= DAMAGE_RATIO_GOOD) {
         rating = "Good";
       } else {
         rating = "Needs Improvement";
@@ -149,26 +282,28 @@ app.tool<{
       // Generate recommendations
       const recommendations: string[] = [];
 
-      if (damageRatio < 1.0) {
+      if (damageRatio < DAMAGE_RATIO_GOOD) {
         recommendations.push(
           "Damage output is lower than damage taken. Focus on trading more effectively and positioning to deal damage safely"
         );
       }
 
-      if (totalDealt < 15_000) {
+      if (totalDealt < MIN_TOTAL_DAMAGE_OUTPUT) {
         recommendations.push(
           "Low total damage output. Look for more opportunities to contribute damage in fights"
         );
       }
 
-      const physicalPercent = (damageDealt.physical / totalDealt) * 100;
-      const magicPercent = (damageDealt.magic / totalDealt) * 100;
+      const physicalPercent =
+        (damageDealt.physical / totalDealt) * PERCENTAGE_MULTIPLIER;
+      const magicPercent =
+        (damageDealt.magic / totalDealt) * PERCENTAGE_MULTIPLIER;
 
-      if (physicalPercent > 70) {
+      if (physicalPercent > PHYSICAL_DAMAGE_HEAVY_THRESHOLD) {
         recommendations.push(
           "Damage is heavily physical. Enemy armor items will significantly reduce your effectiveness"
         );
-      } else if (magicPercent > 70) {
+      } else if (magicPercent > MAGIC_DAMAGE_HEAVY_THRESHOLD) {
         recommendations.push(
           "Damage is heavily magic. Enemy magic resist items will significantly reduce your effectiveness"
         );
@@ -231,83 +366,32 @@ app.tool<{
     try {
       // Calculate kill participation
       const killParticipation =
-        teamKills > 0 ? ((kills + assists) / teamKills) * 100 : 0;
+        teamKills > 0
+          ? ((kills + assists) / teamKills) * PERCENTAGE_MULTIPLIER
+          : 0;
 
       // Calculate KDA ratio
       const kdaRatio =
         deaths > 0 ? (kills + assists) / deaths : kills + assists;
 
       // Determine performance rating
-      let rating: "S-Tier" | "A-Tier" | "B-Tier" | "C-Tier";
+      const rating = determinePerformanceRating(kdaRatio);
 
-      if (kdaRatio >= 5.0) {
-        rating = "S-Tier";
-      } else if (kdaRatio >= 3.0) {
-        rating = "A-Tier";
-      } else if (kdaRatio >= 2.0) {
-        rating = "B-Tier";
-      } else {
-        rating = "C-Tier";
-      }
-
-      // Identify strengths
-      const strengths: string[] = [];
-
-      if (kdaRatio >= 3.0) {
-        strengths.push("Excellent KDA ratio showing strong combat performance");
-      }
-
-      if (killParticipation >= 70) {
-        strengths.push(
-          "High kill participation - actively involved in team objectives"
-        );
-      }
-
-      if (deaths <= 3) {
-        strengths.push("Good survivability - minimizing deaths effectively");
-      }
-
-      if (assists >= kills * 2) {
-        strengths.push(
-          "Strong team support - contributing significantly to assists"
-        );
-      }
-
-      // Identify improvements
-      const improvements: string[] = [];
-
-      if (deaths >= 7) {
-        improvements.push(
-          "High death count. Focus on positioning and map awareness to reduce deaths"
-        );
-      }
-
-      if (killParticipation < 50) {
-        improvements.push(
-          "Low kill participation. Be more present during teamfights and skirmishes"
-        );
-      }
-
-      if (kdaRatio < 2.0 && deaths > kills) {
-        improvements.push(
-          "Negative KDA trend. Review combat engagements and focus on safer trading patterns"
-        );
-      }
-
-      if (assists < 5) {
-        improvements.push(
-          "Limited assist contribution. Look for opportunities to support teammates in fights"
-        );
-      }
-
-      // Default messages
-      if (strengths.length === 0) {
-        strengths.push("Consistent performance in teamfights");
-      }
-
-      if (improvements.length === 0) {
-        improvements.push("Maintain current teamfight approach and execution");
-      }
+      // Identify strengths and improvements
+      const strengths = identifyTeamfightStrengths({
+        kdaRatio,
+        killParticipation,
+        deaths,
+        assists,
+        kills,
+      });
+      const improvements = identifyTeamfightImprovements({
+        deaths,
+        killParticipation,
+        kdaRatio,
+        kills,
+        assists,
+      });
 
       const result = {
         performance: {
@@ -491,13 +575,8 @@ app.tool<{ targetsJson: string; role: string }>(
         champion: t.championName,
         role: t.role,
         damageDealt: t.damageDealt,
-        damageShare: `${((t.damageDealt / totalDamage) * 100).toFixed(1)}%`,
-        priority:
-          t.role === "BOTTOM" || t.role === "MIDDLE"
-            ? "High"
-            : t.role === "UTILITY"
-              ? "Low"
-              : "Medium",
+        damageShare: `${((t.damageDealt / totalDamage) * PERCENTAGE_MULTIPLIER).toFixed(1)}%`,
+        priority: getDamagePriority(t.role),
       }));
 
       const result = {

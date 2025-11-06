@@ -14,18 +14,26 @@ import {
   PutCommand,
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
+import {
+  DYNAMODB_ENDPOINT,
+  MILLISECONDS_TO_SECONDS_DIVISOR,
+  RANDOM_STRING_RADIX,
+  RANDOM_SUBSTRING_LENGTH,
+  RANDOM_SUBSTRING_START,
+  SECONDS_PER_HOUR,
+  SESSION_TTL_HOURS,
+  SESSIONS_TABLE,
+} from "./constants";
 
 const logger = new Logger({ serviceName: "session-manager" });
 
 const client = new DynamoDBClient({
   region: process.env.AWS_REGION || "us-east-1",
+  endpoint: DYNAMODB_ENDPOINT,
 });
 const docClient = DynamoDBDocumentClient.from(client, {
   marshallOptions: { removeUndefinedValues: true },
 });
-
-const SESSIONS_TABLE = process.env.AGENT_SESSIONS_TABLE || "AgentSessions";
-const SESSION_TTL_HOURS = 24;
 
 /**
  * Session status types
@@ -66,7 +74,9 @@ export async function registerSession(params: {
   puuid: string;
 }): Promise<AgentSession> {
   const now = Date.now();
-  const expiresAt = Math.floor(now / 1000) + SESSION_TTL_HOURS * 3600;
+  const expiresAt =
+    Math.floor(now / MILLISECONDS_TO_SECONDS_DIVISOR) +
+    SESSION_TTL_HOURS * SECONDS_PER_HOUR;
 
   const session: AgentSession = {
     sessionId: params.sessionId,
@@ -269,6 +279,11 @@ export async function deleteSession(sessionId: string): Promise<void> {
  */
 export function generateSessionId(agentName: string, matchId: string): string {
   const timestamp = Date.now();
-  const random = Math.random().toString(36).substring(2, 8);
+  const random = Math.random()
+    .toString(RANDOM_STRING_RADIX)
+    .substring(
+      RANDOM_SUBSTRING_START,
+      RANDOM_SUBSTRING_LENGTH + RANDOM_SUBSTRING_START
+    );
   return `${agentName}-${matchId}-${timestamp}-${random}`;
 }

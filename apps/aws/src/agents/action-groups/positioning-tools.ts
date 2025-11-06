@@ -11,6 +11,7 @@ import { Tracer } from "@aws-lambda-powertools/tracer";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, GetCommand } from "@aws-sdk/lib-dynamodb";
 import type { Context } from "aws-lambda";
+import type { RiotTimelineResponse } from "../../shared/types";
 
 const logger = new Logger({ serviceName: "hexcore-positioning-tools" });
 const tracer = new Tracer({ serviceName: "hexcore-positioning-tools" });
@@ -24,6 +25,7 @@ const MARKSMAN_RANGE = 550;
 const MAGE_RANGE = 700;
 const DEFAULT_RANGE = 300;
 const HEAT_MAP_GRID_SIZE = 1000;
+const TOP_HOTSPOTS_LIMIT = 5;
 
 const ddbClient = new DynamoDBClient({});
 const ddb = DynamoDBDocumentClient.from(ddbClient, {
@@ -119,10 +121,10 @@ function generateHeatMapZones(
     cellCounts.set(key, (cellCounts.get(key) || 0) + 1);
   }
 
-  // Find hotspots (top 5 most visited cells)
+  // Find hotspots (top most visited cells)
   const sortedCells = Array.from(cellCounts.entries())
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 5);
+    .slice(0, TOP_HOTSPOTS_LIMIT);
 
   for (const [key, count] of sortedCells) {
     const [cellX, cellY] = key.split(",").map(Number);

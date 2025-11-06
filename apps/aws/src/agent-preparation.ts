@@ -11,6 +11,11 @@ import type { CloudFormationCustomResourceEvent } from "aws-lambda";
 const logger = new Logger({ serviceName: "agent-preparation" });
 const bedrockAgent = new BedrockAgentClient();
 
+// Constants for agent preparation polling
+const MAX_PREPARATION_ATTEMPTS = 60; // 5 minutes with 5-second intervals
+const PREPARATION_WAIT_TIME_MS = 5000; // 5 seconds
+const HTTPS_PORT = 443;
+
 type AgentPreparationProperties = {
   AgentIds: string[];
 };
@@ -51,7 +56,7 @@ type CloudFormationEventWithPhysicalId = CloudFormationCustomResourceEvent & {
 };
 
 // Function to send response to CloudFormation
-const sendResponse = async (
+const sendResponse = (
   event: CloudFormationEventWithPhysicalId,
   status: "SUCCESS" | "FAILED",
   data?: Record<string, unknown>,
@@ -81,7 +86,7 @@ const sendResponse = async (
 
   const options = {
     hostname: parsedUrl.hostname,
-    port: 443,
+    port: HTTPS_PORT,
     path: parsedUrl.pathname + parsedUrl.search,
     method: "PUT",
     headers: {
@@ -116,6 +121,110 @@ const sendResponse = async (
   });
 };
 
+// Helper: Check if agent already has a prepared version
+const checkExistingPreparedVersion = async (
+  agentId: string
+): Promise<boolean> => {
+  const listVersionsResponse = (await bedrockAgent.send(
+    new ListAgentVersionsCommand({ agentId })
+  )) as ListAgentVersionsResponse;
+
+  if (
+    listVersionsResponse.agentVersionSummaries &&
+    listVersionsResponse.agentVersionSummaries.length > 0
+  ) {
+    const preparedVersion = listVersionsResponse.agentVersionSummaries.find(
+      (version) => version.status === "PREPARED"
+    );
+
+    if (preparedVersion) {
+      logger.info("Agent already has prepared version", {
+        agentId,
+        versionId: preparedVersion.id,
+        status: preparedVersion.status,
+      });
+      return true;
+    }
+  }
+  return false;
+};
+
+// Helper: Wait for agent preparation to complete
+const waitForAgentPreparation = async (
+  agentId: string,
+  versionId: string
+): Promise<void> => {
+  let attempts = 0;
+
+  while (attempts < MAX_PREPARATION_ATTEMPTS) {
+    await new Promise((resolve) =>
+      setTimeout(resolve, PREPARATION_WAIT_TIME_MS)
+    );
+
+    const getAgentVersionResponse = (await bedrockAgent.send(
+      new GetAgentVersionCommand({
+        agentId,
+        agentVersion: versionId,
+      })
+    )) as GetAgentVersionResponse;
+
+    if (getAgentVersionResponse.agentVersion?.status === "PREPARED") {
+      logger.info("Agent preparation completed", {
+        agentId,
+        versionId,
+        status: getAgentVersionResponse.agentVersion.status,
+      });
+      return;
+    }
+
+    if (getAgentVersionResponse.agentVersion?.status === "FAILED") {
+      throw new Error(
+        `Agent preparation failed for ${agentId}: ${getAgentVersionResponse.agentVersion.failureReasons?.join(", ")}`
+      );
+    }
+
+    attempts++;
+    logger.info("Waiting for agent preparation", {
+      agentId,
+      versionId,
+      status: getAgentVersionResponse.agentVersion?.status,
+      attempt: attempts,
+      maxAttempts: MAX_PREPARATION_ATTEMPTS,
+    });
+  }
+
+  throw new Error(`Agent preparation timed out for ${agentId}`);
+};
+
+// Helper: Prepare a single agent
+const prepareSingleAgent = async (agentId: string): Promise<void> => {
+  logger.info("Preparing agent", { agentId });
+
+  // Check if agent already has a prepared version
+  const alreadyPrepared = await checkExistingPreparedVersion(agentId);
+  if (alreadyPrepared) {
+    return;
+  }
+
+  // Prepare the agent
+  const prepareResponse = (await bedrockAgent.send(
+    new PrepareAgentCommand({ agentId })
+  )) as PrepareAgentResponse;
+
+  if (!prepareResponse.agentVersion) {
+    throw new Error(`Failed to initiate preparation for agent ${agentId}`);
+  }
+
+  const versionId = prepareResponse.agentVersion.id;
+  logger.info("Agent preparation initiated", {
+    agentId,
+    versionId,
+  });
+
+  // Wait for the agent to be prepared
+  await waitForAgentPreparation(agentId, versionId as string);
+};
+
 export const handler = async (
   event: CloudFormationEventWithPhysicalId
 ): Promise<void> => {
@@ -139,93 +248,8 @@ export const handler = async (
 
       // Prepare all agents and wait for completion
       for (const agentId of agentIds) {
-        logger.info("Preparing agent", { agentId });
-
         try {
-          // Check if agent already has a prepared version
-          const listVersionsResponse = (await bedrockAgent.send(
-            new ListAgentVersionsCommand({ agentId })
-          )) as ListAgentVersionsResponse;
-
-          if (
-            listVersionsResponse.agentVersionSummaries &&
-            listVersionsResponse.agentVersionSummaries.length > 0
-          ) {
-            const preparedVersion =
-              listVersionsResponse.agentVersionSummaries.find(
-                (version) => version.status === "PREPARED"
-              );
-
-            if (preparedVersion) {
-              logger.info("Agent already has prepared version", {
-                agentId,
-                versionId: preparedVersion.id,
-                status: preparedVersion.status,
-              });
-              continue;
-            }
-          }
-
-          // Prepare the agent
-          const prepareResponse = (await bedrockAgent.send(
-            new PrepareAgentCommand({ agentId })
-          )) as PrepareAgentResponse;
-
-          if (prepareResponse.agentVersion) {
-            const versionId = prepareResponse.agentVersion.id;
-            logger.info("Agent preparation initiated", {
-              agentId,
-              versionId,
-            });
-
-            // Wait for the agent to be prepared (polling)
-            let attempts = 0;
-            const maxAttempts = 60; // 5 minutes with 5-second intervals
-            const waitTime = 5000; // 5 seconds
-
-            while (attempts < maxAttempts) {
-              await new Promise((resolve) => setTimeout(resolve, waitTime));
-
-              const getAgentVersionResponse = (await bedrockAgent.send(
-                new GetAgentVersionCommand({
-                  agentId,
-                  agentVersion: versionId,
-                })
-              )) as GetAgentVersionResponse;
-
-              if (getAgentVersionResponse.agentVersion?.status === "PREPARED") {
-                logger.info("Agent preparation completed", {
-                  agentId,
-                  versionId,
-                  status: getAgentVersionResponse.agentVersion.status,
-                });
-                break;
-              }
-
-              if (getAgentVersionResponse.agentVersion?.status === "FAILED") {
-                throw new Error(
-                  `Agent preparation failed for ${agentId}: ${getAgentVersionResponse.agentVersion.failureReasons?.join(", ")}`
-                );
-              }
-
-              attempts++;
-              logger.info("Waiting for agent preparation", {
-                agentId,
-                versionId,
-                status: getAgentVersionResponse.agentVersion?.status,
-                attempt: attempts,
-                maxAttempts,
-              });
-            }
-
-            if (attempts >= maxAttempts) {
-              throw new Error(`Agent preparation timed out for ${agentId}`);
-            }
-          } else {
-            throw new Error(
-              `Failed to initiate preparation for agent ${agentId}`
-            );
-          }
+          await prepareSingleAgent(agentId);
         } catch (error) {
           logger.error("Failed to prepare agent", { agentId, error });
           throw error;

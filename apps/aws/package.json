@@ -31,7 +31,7 @@
   "devDependencies": {
     "@types/aws-lambda": "^8.10.153",
     "@types/node": "^24.6.2",
-    "rimraf": "^5.0.5",
+    "rimraf": "^5.0.10",
     "typescript": "^5.9.3"
   }
 }

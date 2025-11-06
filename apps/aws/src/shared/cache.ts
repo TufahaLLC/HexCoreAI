@@ -11,10 +11,12 @@ import { Logger } from "@aws-lambda-powertools/logger";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { TIMESTAMP_TO_MILLISECONDS } from "./constants";
 
 const logger = new Logger({
   serviceName: "hexcore-cache",
-  logLevel: (process.env.LOG_LEVEL as any) || "INFO",
+  logLevel:
+    (process.env.LOG_LEVEL as "DEBUG" | "INFO" | "WARN" | "ERROR") || "INFO",
 });
 
 // Initialize AWS SDK clients
@@ -31,7 +33,7 @@ export type CachedAnalysis = {
     matchId: string;
     puuid: string;
     timestamp: number;
-    agents: any[];
+    agents: Array<{ name: string; status: string; result?: unknown }>;
     summary: {
       overallScore: number;
       strengths: string[];
@@ -68,7 +70,8 @@ export async function findCachedAnalysis(
   try {
     // Query DynamoDB PuuidIndex for existing results
     const queryCommand = new QueryCommand({
-      TableName: process.env.ANALYSIS_RESULTS_TABLE!,
+      TableName:
+        process.env.ANALYSIS_RESULTS_TABLE ?? "HexCore-AnalysisResults",
       IndexName: "PuuidIndex",
       KeyConditionExpression: "puuid = :puuid",
       ExpressionAttributeValues: {
@@ -99,7 +102,9 @@ export async function findCachedAnalysis(
 
       // For year matching, we'd need to store it separately or extract from timestamp
       // For now, we'll use a simplified approach based on recent results
-      const itemYear = new Date(item.createdAt * 1000).getFullYear().toString();
+      const itemYear = new Date(item.createdAt * TIMESTAMP_TO_MILLISECONDS)
+        .getFullYear()
+        .toString();
 
       return matchRegion === region.toLowerCase() && itemYear === year;
     });
@@ -127,7 +132,7 @@ export async function findCachedAnalysis(
     // Fetch the full synthesis from S3
     try {
       const s3Command = new GetObjectCommand({
-        Bucket: process.env.RESULTS_BUCKET!,
+        Bucket: process.env.RESULTS_BUCKET ?? "hexcore-results",
         Key: cachedResult.s3Key as string,
       });
 

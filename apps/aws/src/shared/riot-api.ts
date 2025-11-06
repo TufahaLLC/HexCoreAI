@@ -9,9 +9,13 @@ import {
   BACKOFF_JITTER_RANGE_MS,
   BACKOFF_MULTIPLIER,
   DEFAULT_MAX_RETRIES,
+  EARLY_GAME_TIME_MINUTES,
+  LATE_GAME_TIME_MINUTES,
+  MID_GAME_TIME_MINUTES,
   RATE_LIMIT_STATUS_CODES,
   RIOT_MAX_MATCH_COUNT,
   RIOT_UNAUTHORIZED_STATUS_CODES,
+  TIMESTAMP_MULTIPLIER,
 } from "./constants";
 import type {
   ItemPurchase,
@@ -21,6 +25,14 @@ import type {
   RiotSummonerResponse,
   RiotTimelineResponse,
 } from "./types";
+
+// Simple participant type for type safety
+type RiotParticipant = {
+  teamId: number;
+  puuid: string;
+  championName: string;
+  teamPosition: string;
+};
 
 const secretsClient = new SecretsManagerClient({});
 let cachedApiKey: string | null = null;
@@ -315,20 +327,21 @@ export function filterMatchData(
     teamComposition: {
       allies: matchData.info.participants
         .filter(
-          (p: any) => p.teamId === participant.teamId && p.puuid !== puuid
+          (p: RiotParticipant) =>
+            p.teamId === participant.teamId && p.puuid !== puuid
         )
-        .map((p: any) => ({
+        .map((p: RiotParticipant) => ({
           championName: p.championName,
           role: p.teamPosition,
         })),
       enemies: matchData.info.participants
-        .filter((p: any) => p.teamId !== participant.teamId)
-        .map((p: any) => ({
+        .filter((p: RiotParticipant) => p.teamId !== participant.teamId)
+        .map((p: RiotParticipant) => ({
           championName: p.championName,
           role: p.teamPosition,
         })),
     },
-  } as any;
+  };
 }
 
 function extractItemTimeline(
@@ -404,7 +417,7 @@ export function extractCSAtTime(
   participantId: number,
   timeMinutes: number
 ): number {
-  const targetTimestamp = timeMinutes * 60 * 1000; // Convert to milliseconds
+  const targetTimestamp = timeMinutes * TIMESTAMP_MULTIPLIER; // Convert to milliseconds
 
   for (const frame of timelineData.info.frames) {
     if (frame.timestamp >= targetTimestamp) {
@@ -429,7 +442,7 @@ export function extractGoldAtTime(
   participantId: number,
   timeMinutes: number
 ): number {
-  const targetTimestamp = timeMinutes * 60 * 1000;
+  const targetTimestamp = timeMinutes * TIMESTAMP_MULTIPLIER;
 
   for (const frame of timelineData.info.frames) {
     if (frame.timestamp >= targetTimestamp) {
@@ -540,19 +553,43 @@ export function calculatePhasePerformance(
 } {
   return {
     earlyGame: {
-      cs: extractCSAtTime(timelineData, participantId, 10),
-      gold: extractGoldAtTime(timelineData, participantId, 10),
-      level: extractLevelAtTime(timelineData, participantId, 10),
+      cs: extractCSAtTime(timelineData, participantId, EARLY_GAME_TIME_MINUTES),
+      gold: extractGoldAtTime(
+        timelineData,
+        participantId,
+        EARLY_GAME_TIME_MINUTES
+      ),
+      level: extractLevelAtTime(
+        timelineData,
+        participantId,
+        EARLY_GAME_TIME_MINUTES
+      ),
     },
     midGame: {
-      cs: extractCSAtTime(timelineData, participantId, 20),
-      gold: extractGoldAtTime(timelineData, participantId, 20),
-      level: extractLevelAtTime(timelineData, participantId, 20),
+      cs: extractCSAtTime(timelineData, participantId, MID_GAME_TIME_MINUTES),
+      gold: extractGoldAtTime(
+        timelineData,
+        participantId,
+        MID_GAME_TIME_MINUTES
+      ),
+      level: extractLevelAtTime(
+        timelineData,
+        participantId,
+        MID_GAME_TIME_MINUTES
+      ),
     },
     lateGame: {
-      cs: extractCSAtTime(timelineData, participantId, 30),
-      gold: extractGoldAtTime(timelineData, participantId, 30),
-      level: extractLevelAtTime(timelineData, participantId, 30),
+      cs: extractCSAtTime(timelineData, participantId, LATE_GAME_TIME_MINUTES),
+      gold: extractGoldAtTime(
+        timelineData,
+        participantId,
+        LATE_GAME_TIME_MINUTES
+      ),
+      level: extractLevelAtTime(
+        timelineData,
+        participantId,
+        LATE_GAME_TIME_MINUTES
+      ),
     },
   };
 }
@@ -562,7 +599,7 @@ function extractLevelAtTime(
   participantId: number,
   timeMinutes: number
 ): number {
-  const targetTimestamp = timeMinutes * 60 * 1000;
+  const targetTimestamp = timeMinutes * TIMESTAMP_MULTIPLIER;
 
   for (const frame of timelineData.info.frames) {
     if (frame.timestamp >= targetTimestamp) {

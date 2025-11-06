@@ -11,6 +11,41 @@ import { Tracer } from "@aws-lambda-powertools/tracer";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, GetCommand } from "@aws-sdk/lib-dynamodb";
 import type { Context } from "aws-lambda";
+import {
+  CS_BOTTOM_AVERAGE,
+  CS_BOTTOM_EXCELLENT,
+  CS_BOTTOM_GOOD,
+  CS_JUNGLE_AVERAGE,
+  CS_JUNGLE_EXCELLENT,
+  CS_JUNGLE_GOOD,
+  CS_MIDDLE_AVERAGE,
+  CS_MIDDLE_EXCELLENT,
+  CS_MIDDLE_GOOD,
+  CS_TOP_AVERAGE,
+  CS_TOP_EXCELLENT,
+  CS_TOP_GOOD,
+  CS_UTILITY_AVERAGE,
+  CS_UTILITY_EXCELLENT,
+  CS_UTILITY_GOOD,
+  FARMING_EFFICIENCY_THRESHOLD,
+  GOLD_EFFICIENCY_NEGATIVE_THRESHOLD,
+  GOLD_EFFICIENCY_THRESHOLD,
+  GOLD_PER_MIN_AVERAGE,
+  GOLD_PER_MIN_EXCELLENT,
+  GOLD_PER_MIN_GOOD,
+  MAX_THEORETICAL_CS_PER_MIN,
+  MILLISECONDS_PER_MINUTE,
+  PERCENTAGE_MULTIPLIER,
+  PLACEHOLDER_ITEM_GOLD_VALUE,
+  PLACEHOLDER_OPTIMAL_ITEM_GOLD_VALUE,
+  RECALL_TIMING_1,
+  RECALL_TIMING_2,
+  RECALL_TIMING_3,
+  RECALL_TIMING_4,
+  RECALL_TIMING_5,
+  SUPPORT_HIGH_CS_THRESHOLD,
+  UNSPENT_GOLD_THRESHOLD,
+} from "../../shared/constants";
 
 const logger = new Logger({ serviceName: "hexcore-economy-tools" });
 const tracer = new Tracer({ serviceName: "hexcore-economy-tools" });
@@ -18,6 +53,23 @@ const app = new BedrockAgentFunctionResolver({ logger });
 
 const ddbClient = new DynamoDBClient({});
 const ddb = DynamoDBDocumentClient.from(ddbClient);
+
+// Economy analysis constants
+const DEVIATION_EXCELLENT_THRESHOLD = 1;
+const DEVIATION_GOOD_THRESHOLD = 2;
+
+/**
+ * Helper function to get deviation rating
+ */
+function getDeviationRating(deviation: number): string {
+  if (deviation < DEVIATION_EXCELLENT_THRESHOLD) {
+    return "Excellent";
+  }
+  if (deviation < DEVIATION_GOOD_THRESHOLD) {
+    return "Good";
+  }
+  return "Poor";
+}
 
 /**
  * Tool: Get Match Economy Data
@@ -105,17 +157,18 @@ app.tool<{
 
       // Calculate gold metrics
       const goldPerMinute = totalGold / gameDurationMinutes;
-      const goldEfficiency = totalGold > 0 ? (goldSpent / totalGold) * 100 : 0;
+      const goldEfficiency =
+        totalGold > 0 ? (goldSpent / totalGold) * PERCENTAGE_MULTIPLIER : 0;
       const unspentGold = totalGold - goldSpent;
 
       // Determine gold generation rating
       let rating: "Excellent" | "Good" | "Average" | "Needs Improvement";
 
-      if (goldPerMinute >= 400) {
+      if (goldPerMinute >= GOLD_PER_MIN_EXCELLENT) {
         rating = "Excellent";
-      } else if (goldPerMinute >= 350) {
+      } else if (goldPerMinute >= GOLD_PER_MIN_GOOD) {
         rating = "Good";
-      } else if (goldPerMinute >= 300) {
+      } else if (goldPerMinute >= GOLD_PER_MIN_AVERAGE) {
         rating = "Average";
       } else {
         rating = "Needs Improvement";
@@ -124,25 +177,25 @@ app.tool<{
       // Generate recommendations
       const recommendations: string[] = [];
 
-      if (goldPerMinute < 300) {
+      if (goldPerMinute < GOLD_PER_MIN_AVERAGE) {
         recommendations.push(
           "Low gold income. Focus on farming minions consistently and securing neutral objectives"
         );
       }
 
-      if (goldEfficiency < 85) {
+      if (goldEfficiency < GOLD_EFFICIENCY_THRESHOLD) {
         recommendations.push(
           "Significant gold left unspent. Ensure you're spending gold efficiently on items between fights"
         );
       }
 
-      if (unspentGold > 2000) {
+      if (unspentGold > UNSPENT_GOLD_THRESHOLD) {
         recommendations.push(
           `${unspentGold.toFixed(0)} gold left unspent. Make sure to spend gold after recalls to maximize power spikes`
         );
       }
 
-      if (goldPerMinute >= 400) {
+      if (goldPerMinute >= GOLD_PER_MIN_EXCELLENT) {
         recommendations.push(
           "Excellent gold generation. Continue maintaining strong farming patterns"
         );
@@ -210,11 +263,31 @@ app.tool<{
         string,
         { excellent: number; good: number; average: number }
       > = {
-        TOP: { excellent: 8.0, good: 7.0, average: 6.0 },
-        JUNGLE: { excellent: 6.5, good: 5.5, average: 4.5 },
-        MIDDLE: { excellent: 8.5, good: 7.5, average: 6.5 },
-        BOTTOM: { excellent: 9.0, good: 8.0, average: 7.0 },
-        UTILITY: { excellent: 3.0, good: 2.0, average: 1.0 },
+        TOP: {
+          excellent: CS_TOP_EXCELLENT,
+          good: CS_TOP_GOOD,
+          average: CS_TOP_AVERAGE,
+        },
+        JUNGLE: {
+          excellent: CS_JUNGLE_EXCELLENT,
+          good: CS_JUNGLE_GOOD,
+          average: CS_JUNGLE_AVERAGE,
+        },
+        MIDDLE: {
+          excellent: CS_MIDDLE_EXCELLENT,
+          good: CS_MIDDLE_GOOD,
+          average: CS_MIDDLE_AVERAGE,
+        },
+        BOTTOM: {
+          excellent: CS_BOTTOM_EXCELLENT,
+          good: CS_BOTTOM_GOOD,
+          average: CS_BOTTOM_AVERAGE,
+        },
+        UTILITY: {
+          excellent: CS_UTILITY_EXCELLENT,
+          good: CS_UTILITY_GOOD,
+          average: CS_UTILITY_AVERAGE,
+        },
       };
 
       const roleBenchmark = benchmarks[role] || benchmarks.MIDDLE;
@@ -233,8 +306,9 @@ app.tool<{
       }
 
       // Calculate farming efficiency
-      const maxPossibleCs = gameDurationMinutes * 10.5; // ~10.5 CS per minute is theoretical max
-      const farmingEfficiency = (totalCs / maxPossibleCs) * 100;
+      const maxPossibleCs = gameDurationMinutes * MAX_THEORETICAL_CS_PER_MIN;
+      const farmingEfficiency =
+        (totalCs / maxPossibleCs) * PERCENTAGE_MULTIPLIER;
 
       // Generate recommendations
       const recommendations: string[] = [];
@@ -245,7 +319,10 @@ app.tool<{
         );
       }
 
-      if (farmingEfficiency < 60 && role !== "UTILITY") {
+      if (
+        farmingEfficiency < FARMING_EFFICIENCY_THRESHOLD &&
+        role !== "UTILITY"
+      ) {
         recommendations.push(
           "Missing significant farm opportunities. Prioritize wave management and jungle camp clear timing"
         );
@@ -257,7 +334,7 @@ app.tool<{
         );
       }
 
-      if (role === "UTILITY" && csPerMinute > 4.0) {
+      if (role === "UTILITY" && csPerMinute > SUPPORT_HIGH_CS_THRESHOLD) {
         recommendations.push(
           "High CS for support role. Ensure you're not taking farm from your ADC"
         );
@@ -373,10 +450,12 @@ app.tool<{ playerBuildJson: string; optimalBuildJson: string }>(
       // const itemStats = await externalAPIClient.getItemsFromDataDragon([...playerBuild, ...optimalBuild]);
 
       // Placeholder calculations
-      const playerGoldValue = playerBuild.length * 3000; // Placeholder
-      const optimalGoldValue = optimalBuild.length * 3200; // Placeholder
+      const playerGoldValue = playerBuild.length * PLACEHOLDER_ITEM_GOLD_VALUE;
+      const optimalGoldValue =
+        optimalBuild.length * PLACEHOLDER_OPTIMAL_ITEM_GOLD_VALUE;
       const efficiencyDifference =
-        (playerGoldValue / optimalGoldValue) * 100 - 100;
+        (playerGoldValue / optimalGoldValue) * PERCENTAGE_MULTIPLIER -
+        PERCENTAGE_MULTIPLIER;
 
       const result = {
         playerBuild,
@@ -387,7 +466,7 @@ app.tool<{ playerBuildJson: string; optimalBuildJson: string }>(
         rating:
           efficiencyDifference >= 0 ? "Optimal or better" : "Below optimal",
         recommendation:
-          efficiencyDifference < -10
+          efficiencyDifference < GOLD_EFFICIENCY_NEGATIVE_THRESHOLD
             ? "Consider switching to meta-optimal items for better gold efficiency"
             : "Build efficiency is acceptable",
         note: "TODO: Integration with Data Dragon API pending (Task 11.5)",
@@ -435,10 +514,18 @@ app.tool<{ recallsJson: string; role: string; rank: string }>(
       // const metaRecallData = await externalAPIClient.getRecallTimingsFromLoLalytics(role, rank);
 
       // Placeholder optimal recall timings (in minutes)
-      const optimalRecallTimings = [4, 8, 12, 16, 20];
+      const optimalRecallTimings = [
+        RECALL_TIMING_1,
+        RECALL_TIMING_2,
+        RECALL_TIMING_3,
+        RECALL_TIMING_4,
+        RECALL_TIMING_5,
+      ];
 
       // Calculate actual recall timings in minutes
-      const actualRecallTimings = recalls.map((r) => r.timestamp / 60_000);
+      const actualRecallTimings = recalls.map(
+        (r) => r.timestamp / MILLISECONDS_PER_MINUTE
+      );
 
       // Analyze timing deviations
       const timingAnalysis = actualRecallTimings.map((timing, index) => {
@@ -449,12 +536,7 @@ app.tool<{ recallsJson: string; role: string; rank: string }>(
           actualTiming: `${timing.toFixed(1)} min`,
           optimalTiming: `${optimalTiming.toFixed(1)} min`,
           deviation: `${deviation.toFixed(1)} min`,
-          rating:
-            Math.abs(deviation) < 1
-              ? "Good"
-              : Math.abs(deviation) < 2
-                ? "Acceptable"
-                : "Poor",
+          rating: getDeviationRating(Math.abs(deviation)),
         };
       });
 

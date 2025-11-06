@@ -11,22 +11,91 @@ import { Tracer } from "@aws-lambda-powertools/tracer";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, GetCommand } from "@aws-sdk/lib-dynamodb";
 import type { Context } from "aws-lambda";
+import {
+  PERCENTAGE_MULTIPLIER,
+  SECONDS_PER_MINUTE,
+  VISION_SCORE_PER_MIN_AVERAGE,
+  VISION_SCORE_PER_MIN_EXCELLENT,
+  VISION_SCORE_PER_MIN_GOOD,
+  WARDS_CLEARED_AVERAGE,
+  WARDS_PLACED_AVERAGE,
+} from "../../shared/constants";
 
 const logger = new Logger({ serviceName: "hexcore-vision-tools" });
 const tracer = new Tracer({ serviceName: "hexcore-vision-tools" });
 const app = new BedrockAgentFunctionResolver({ logger });
 
-// Vision analysis constants
-const SECONDS_PER_MINUTE = 60;
-const PERCENTAGE_MULTIPLIER = 100;
-const EXCELLENT_VISION_THRESHOLD = 2.0;
-const GOOD_VISION_THRESHOLD = 1.5;
-const AVERAGE_VISION_THRESHOLD = 1.0;
-
 const ddbClient = new DynamoDBClient({});
 const ddb = DynamoDBDocumentClient.from(ddbClient, {
   marshallOptions: { removeUndefinedValues: true },
 });
+
+// Vision analysis constants
+const MIN_WARDS_PER_MINUTE_THRESHOLD = 0.3;
+const DENIAL_RATIO_EXCELLENT_THRESHOLD = 2.0;
+const DENIAL_RATIO_GOOD_THRESHOLD = 1.5;
+const DENIAL_RATIO_AVERAGE_THRESHOLD = 1.0;
+
+// Vision benchmark constants
+const VISION_POOR_BENCHMARK = 3;
+const CONTROL_WARDS_POOR_BENCHMARK = 2;
+const CONTROL_WARDS_AVERAGE_BENCHMARK = 5;
+const VISION_TOP10_UTILITY = 90;
+const VISION_TOP10_NON_UTILITY = 60;
+const WARDS_TOP10_UTILITY = 55;
+const WARDS_TOP10_NON_UTILITY = 25;
+
+// Additional vision constants
+const VISION_UTILITY_EXCELLENT = 3.0;
+const VISION_UTILITY_GOOD = 2.5;
+const VISION_UTILITY_AVERAGE = 2.0;
+const VISION_UTILITY_POOR = 1.5;
+const VISION_NON_UTILITY_EXCELLENT = 2.0;
+const VISION_NON_UTILITY_GOOD = 1.5;
+const VISION_NON_UTILITY_AVERAGE = 1.0;
+const VISION_NON_UTILITY_POOR = 0.7;
+
+const WARDS_UTILITY_EXCELLENT = 50;
+const WARDS_UTILITY_GOOD = 40;
+const WARDS_UTILITY_AVERAGE = 30;
+const WARDS_UTILITY_POOR = 20;
+const WARDS_NON_UTILITY_EXCELLENT = 20;
+const WARDS_NON_UTILITY_GOOD = 15;
+const WARDS_NON_UTILITY_AVERAGE = 10;
+const WARDS_NON_UTILITY_POOR = 5;
+
+const WARDS_DESTROYED_EXCELLENT = 15;
+const WARDS_DESTROYED_GOOD = 10;
+const WARDS_DESTROYED_AVERAGE = 7;
+
+const VISION_TOP25_UTILITY = 75;
+const VISION_TOP25_NON_UTILITY = 50;
+const WARDS_TOP25_UTILITY = 45;
+const WARDS_TOP25_NON_UTILITY = 18;
+
+const VISION_TOP50_UTILITY = 60;
+const VISION_TOP50_NON_UTILITY = 40;
+const WARDS_TOP50_UTILITY = 35;
+const WARDS_TOP50_NON_UTILITY = 12;
+
+const DENIAL_RATIO_GOOD_BENCHMARK = 1.5;
+
+// Vision setup types
+type VisionSetup = {
+  wardLocations: string[];
+  timing: string;
+  priority: string;
+  controlWardPriority: string;
+  clearPriority: string[];
+};
+
+type ObjectiveVisionSetups = {
+  dragon: VisionSetup;
+  herald: VisionSetup;
+  baron: VisionSetup;
+  elder: VisionSetup;
+  [key: string]: VisionSetup; // Allow string indexing
+};
 
 /**
  * Tool: Get Match Vision Data
@@ -121,11 +190,11 @@ app.tool<{
       // Determine vision rating
       let rating: "Excellent" | "Good" | "Average" | "Needs Improvement";
 
-      if (visionScorePerMinute >= EXCELLENT_VISION_THRESHOLD) {
+      if (visionScorePerMinute >= VISION_SCORE_PER_MIN_EXCELLENT) {
         rating = "Excellent";
-      } else if (visionScorePerMinute >= GOOD_VISION_THRESHOLD) {
+      } else if (visionScorePerMinute >= VISION_SCORE_PER_MIN_GOOD) {
         rating = "Good";
-      } else if (visionScorePerMinute >= AVERAGE_VISION_THRESHOLD) {
+      } else if (visionScorePerMinute >= VISION_SCORE_PER_MIN_AVERAGE) {
         rating = "Average";
       } else {
         rating = "Needs Improvement";
@@ -134,32 +203,35 @@ app.tool<{
       // Generate recommendations
       const recommendations: string[] = [];
 
-      if (wardsPerMinute < 0.3) {
+      if (wardsPerMinute < MIN_WARDS_PER_MINUTE_THRESHOLD) {
         recommendations.push(
           "Low ward placement rate. Use your trinket and control wards more frequently to establish vision control"
         );
       }
 
-      if (wardsDestroyed < 5) {
+      if (wardsDestroyed < WARDS_CLEARED_AVERAGE) {
         recommendations.push(
           "Limited ward clearing. Look for opportunities to deny enemy vision before objectives"
         );
       }
 
-      if (visionScore < gameDurationMinutes * 1.0) {
+      if (visionScore < gameDurationMinutes * VISION_SCORE_PER_MIN_AVERAGE) {
         recommendations.push(
           "Vision score is below average. Focus on placing wards in high-value locations before objectives and teamfights"
         );
       }
 
-      if (wardClearEfficiency < 20 && wardsPlaced >= 10) {
+      if (
+        wardClearEfficiency < WARDS_CLEARED_AVERAGE &&
+        wardsPlaced >= WARDS_PLACED_AVERAGE
+      ) {
         recommendations.push(
           "Low ward clear rate relative to placement. Prioritize clearing enemy vision in contested areas"
         );
       }
 
       // Ward placement timing recommendations
-      if (visionScorePerMinute >= 1.5) {
+      if (visionScorePerMinute >= VISION_SCORE_PER_MIN_GOOD) {
         recommendations.push(
           "Strong vision control. Continue maintaining vision around objectives and in enemy jungle"
         );
@@ -285,32 +357,75 @@ app.tool<{ role: string; rank: string }>(
         benchmarks: {
           visionScorePerMinute:
             role === "UTILITY"
-              ? { excellent: 3.0, good: 2.5, average: 2.0, poor: 1.5 }
-              : { excellent: 2.0, good: 1.5, average: 1.0, poor: 0.7 },
+              ? {
+                  excellent: VISION_UTILITY_EXCELLENT,
+                  good: VISION_UTILITY_GOOD,
+                  average: VISION_UTILITY_AVERAGE,
+                  poor: VISION_UTILITY_POOR,
+                }
+              : {
+                  excellent: VISION_NON_UTILITY_EXCELLENT,
+                  good: VISION_NON_UTILITY_GOOD,
+                  average: VISION_NON_UTILITY_AVERAGE,
+                  poor: VISION_NON_UTILITY_POOR,
+                },
           wardsPlacedPerGame:
             role === "UTILITY"
-              ? { excellent: 50, good: 40, average: 30, poor: 20 }
-              : { excellent: 20, good: 15, average: 10, poor: 5 },
+              ? {
+                  excellent: WARDS_UTILITY_EXCELLENT,
+                  good: WARDS_UTILITY_GOOD,
+                  average: WARDS_UTILITY_AVERAGE,
+                  poor: WARDS_UTILITY_POOR,
+                }
+              : {
+                  excellent: WARDS_NON_UTILITY_EXCELLENT,
+                  good: WARDS_NON_UTILITY_GOOD,
+                  average: WARDS_NON_UTILITY_AVERAGE,
+                  poor: WARDS_NON_UTILITY_POOR,
+                },
           wardsDestroyedPerGame: {
-            excellent: 15,
-            good: 10,
-            average: 7,
-            poor: 3,
+            excellent: WARDS_DESTROYED_EXCELLENT,
+            good: WARDS_DESTROYED_GOOD,
+            average: WARDS_DESTROYED_AVERAGE,
+            poor: VISION_POOR_BENCHMARK,
           },
-          controlWardsBought: { excellent: 10, good: 7, average: 5, poor: 2 },
+          controlWardsBought: {
+            excellent: 10,
+            good: 7,
+            average: CONTROL_WARDS_AVERAGE_BENCHMARK,
+            poor: CONTROL_WARDS_POOR_BENCHMARK,
+          },
         },
         percentileRankings: {
           top10: {
-            visionScore: role === "UTILITY" ? 90 : 60,
-            wardsPlaced: role === "UTILITY" ? 55 : 25,
+            visionScore:
+              role === "UTILITY"
+                ? VISION_TOP10_UTILITY
+                : VISION_TOP10_NON_UTILITY,
+            wardsPlaced:
+              role === "UTILITY"
+                ? WARDS_TOP10_UTILITY
+                : WARDS_TOP10_NON_UTILITY,
           },
           top25: {
-            visionScore: role === "UTILITY" ? 75 : 50,
-            wardsPlaced: role === "UTILITY" ? 45 : 18,
+            visionScore:
+              role === "UTILITY"
+                ? VISION_TOP25_UTILITY
+                : VISION_TOP25_NON_UTILITY,
+            wardsPlaced:
+              role === "UTILITY"
+                ? WARDS_TOP25_UTILITY
+                : WARDS_TOP25_NON_UTILITY,
           },
           top50: {
-            visionScore: role === "UTILITY" ? 60 : 40,
-            wardsPlaced: role === "UTILITY" ? 35 : 12,
+            visionScore:
+              role === "UTILITY"
+                ? VISION_TOP50_UTILITY
+                : VISION_TOP50_NON_UTILITY,
+            wardsPlaced:
+              role === "UTILITY"
+                ? WARDS_TOP50_UTILITY
+                : WARDS_TOP50_NON_UTILITY,
           },
         },
         note: "TODO: Integration with U.GG API pending (Task 11.5)",
@@ -350,7 +465,7 @@ app.tool<{ objectiveType: string }>(
       // TODO: Replace with actual external API call
       // const setupData = await externalAPIClient.getObjectiveVisionFromMobalytics(objectiveType);
 
-      const visionSetups: Record<string, any> = {
+      const visionSetups: ObjectiveVisionSetups = {
         dragon: {
           wardLocations: [
             "Dragon pit entrance from river",
@@ -446,11 +561,11 @@ app.tool<{ wardsKilled: number; detectorsPlaced: number }>(
         detectorsPlaced > 0 ? wardsKilled / detectorsPlaced : 0;
 
       let efficiency: string;
-      if (denialRatio >= 2.0) {
+      if (denialRatio >= DENIAL_RATIO_EXCELLENT_THRESHOLD) {
         efficiency = "Excellent";
-      } else if (denialRatio >= 1.5) {
+      } else if (denialRatio >= DENIAL_RATIO_GOOD_THRESHOLD) {
         efficiency = "Good";
-      } else if (denialRatio >= 1.0) {
+      } else if (denialRatio >= DENIAL_RATIO_AVERAGE_THRESHOLD) {
         efficiency = "Average";
       } else {
         efficiency = "Needs Improvement";
@@ -462,7 +577,7 @@ app.tool<{ wardsKilled: number; detectorsPlaced: number }>(
         denialRatio: denialRatio.toFixed(2),
         efficiency,
         recommendations: [
-          denialRatio < 1.5
+          denialRatio < DENIAL_RATIO_GOOD_BENCHMARK
             ? "Use sweeper more efficiently - clear vision before objectives"
             : "Good vision denial - continue denying enemy vision",
           "Prioritize clearing wards in high-value locations (objectives, jungle entrances)",

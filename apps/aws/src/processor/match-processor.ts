@@ -21,7 +21,7 @@ import {
   getSummonerRank,
 } from "../shared/riot-api";
 import { type SQSMatchMessage, sqsMatchMessageSchema } from "../shared/schemas";
-import type { EventBridgeMatchEvent } from "../shared/types";
+import type { EventBridgeMatchEvent, RankInfoData } from "../shared/types";
 import { sendWebSocketUpdate } from "../shared/websocket-client";
 
 const ddbClient = new DynamoDBClient({});
@@ -64,7 +64,7 @@ const processMatchIdempotent = makeIdempotent(
       ];
 
       // Fetch rank data (not parallelized because it needs summonerId)
-      let rankData;
+      let rankData: RankInfoData;
       try {
         rankData = await getSummonerRank(region, summonerData.id);
       } catch (rankError) {

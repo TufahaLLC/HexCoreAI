@@ -1,6 +1,6 @@
 "use client";
 
-import { AnalysisDashboard } from "@/components/AnalysisDashboard";
+import { AnalysisDashboard } from "@/components/analysis-dashboard";
 
 export default function AnalysisPage() {
   return <AnalysisDashboard />;

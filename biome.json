@@ -31,6 +31,20 @@
           "suspicious": { "noUnknownAtRules": "off" }
         }
       }
+    },
+    {
+      "includes": ["apps/aws/src/**/*.ts"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noAsyncPromiseExecutor": "off",
+            "useAwait": "off"
+          },
+          "style": {
+            "useAtIndex": "off"
+          }
+        }
+      }
     }
   ]
 }
