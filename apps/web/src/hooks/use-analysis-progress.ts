@@ -17,6 +17,11 @@ export const useAnalysisProgress = () => {
       EconomyAgent: INITIAL_PROGRESS,
       ChampionAgent: INITIAL_PROGRESS,
       CompetitiveAgent: INITIAL_PROGRESS,
+      MacroAgent: INITIAL_PROGRESS,
+      PositioningAgent: INITIAL_PROGRESS,
+      TemporalAgent: INITIAL_PROGRESS,
+      SynergyAgent: INITIAL_PROGRESS,
+      AdaptationAgent: INITIAL_PROGRESS,
       Synthesizer: INITIAL_PROGRESS,
     }
   );

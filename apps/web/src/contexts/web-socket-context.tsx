@@ -20,6 +20,11 @@ export type AgentType =
   | "EconomyAgent"
   | "ChampionAgent"
   | "CompetitiveAgent"
+  | "MacroAgent"
+  | "PositioningAgent"
+  | "TemporalAgent"
+  | "SynergyAgent"
+  | "AdaptationAgent"
   | "Synthesizer";
 
 export type ToolInvocation = {
@@ -63,6 +68,14 @@ export type WebSocketMessage = {
   error?: string;
 };
 
+type ConnectionParams = {
+  sessionId: string;
+  gameName: string;
+  tagLine: string;
+  region: string;
+  year: number;
+};
+
 type WebSocketContextValue = {
   // Connection state
   readyState: ReadyState;
@@ -74,17 +87,13 @@ type WebSocketContextValue = {
   messageHistory: WebSocketMessage[];
 
   // Connection management
-  connect: (
-    sessionId: string,
-    puuid: string,
-    region: string,
-    year: number
-  ) => void;
+  connect: (params: ConnectionParams) => void;
   disconnect: () => void;
 
   // Session info
   sessionId: string | null;
-  puuid: string | null;
+  gameName: string | null;
+  tagLine: string | null;
 };
 
 const WebSocketContext = createContext<WebSocketContextValue | undefined>(
@@ -111,7 +120,8 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({
 }) => {
   const [socketUrl, setSocketUrl] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [puuid, setPuuid] = useState<string | null>(null);
+  const [gameName, setGameName] = useState<string | null>(null);
+  const [tagLine, setTagLine] = useState<string | null>(null);
   const [messageHistory, setMessageHistory] = useState<WebSocketMessage[]>([]);
   const [lastMessage, setLastMessage] = useState<WebSocketMessage | null>(null);
 
@@ -175,12 +185,14 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({
 
   // Connection management
   const connect = useCallback(
-    (
-      connSessionId: string,
-      connPuuid: string,
-      region: string,
-      year: number
-    ) => {
+    (params: ConnectionParams) => {
+      const {
+        sessionId: paramSessionId,
+        gameName: paramGameName,
+        tagLine: paramTagLine,
+        region,
+        year,
+      } = params;
       const baseUrl = websocketUrl || process.env.NEXT_PUBLIC_WEBSOCKET_URL;
 
       if (!baseUrl) {
@@ -188,11 +200,12 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({
       }
 
       // Build connection URL with query parameters
-      const url = `${baseUrl}?sessionId=${encodeURIComponent(connSessionId)}&puuid=${encodeURIComponent(connPuuid)}&region=${encodeURIComponent(region)}&year=${year}`;
+      const url = `${baseUrl}?sessionId=${encodeURIComponent(paramSessionId)}&gameName=${encodeURIComponent(paramGameName)}&tagLine=${encodeURIComponent(paramTagLine)}&region=${encodeURIComponent(region)}&year=${year}`;
 
       setSocketUrl(url);
-      setSessionId(connSessionId);
-      setPuuid(connPuuid);
+      setSessionId(paramSessionId);
+      setGameName(paramGameName);
+      setTagLine(paramTagLine);
       setMessageHistory([]);
       setLastMessage(null);
     },
@@ -202,7 +215,8 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({
   const disconnect = useCallback(() => {
     setSocketUrl(null);
     setSessionId(null);
-    setPuuid(null);
+    setGameName(null);
+    setTagLine(null);
 
     const ws = getWebSocket();
     if (ws) {
@@ -223,7 +237,8 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({
     connect,
     disconnect,
     sessionId,
-    puuid,
+    gameName,
+    tagLine,
   };
 
   return (
