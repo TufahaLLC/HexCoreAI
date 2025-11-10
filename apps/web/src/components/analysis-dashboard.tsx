@@ -34,7 +34,7 @@ const PROGRESS_TEXT_DELAY = 0.3;
 const DEFAULT_HEXAGON_SIZE = 300;
 
 // TEMPORARY: Force connection for testing - remove this in production
-const FORCE_CONNECTED_FOR_TESTING = true;
+const FORCE_CONNECTED_FOR_TESTING = false;
 
 export const AnalysisDashboard = () => {
   const {
