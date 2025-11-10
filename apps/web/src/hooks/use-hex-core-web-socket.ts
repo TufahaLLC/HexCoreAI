@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import type {
   AgentType as AgentTypeType,
   MessageStatus as MessageStatusType,
@@ -217,6 +218,62 @@ const getAnimationPhase = (
 
 const SYNTHESIS_DELAY_MS = 1000;
 
+// Helper function to update active agents list
+const updateActiveAgents = (
+  prevAgents: AgentType[],
+  agent: AgentType,
+  status: MessageStatus
+): AgentType[] => {
+  if (status === "processing" || status === "started") {
+    return prevAgents.includes(agent) ? prevAgents : [...prevAgents, agent];
+  }
+  if (status === "completed") {
+    return prevAgents.filter((a) => a !== agent);
+  }
+  return prevAgents;
+};
+
+// Helper function to update completed agents list
+const updateCompletedAgents = (
+  prevAgents: AgentType[],
+  agent: AgentType,
+  status: MessageStatus
+): AgentType[] => {
+  if (status === "completed") {
+    return prevAgents.includes(agent) ? prevAgents : [...prevAgents, agent];
+  }
+  return prevAgents;
+};
+
+// Helper function to show agent toast notifications
+const showAgentToast = (
+  agent: AgentType,
+  status: MessageStatus,
+  message: string
+): void => {
+  if (status === "started" && agent !== "Synthesizer") {
+    const championInfo = CHAMPION_AGENTS[agent];
+    toast.info(`${championInfo.champion} Agent Activated`, {
+      description: message || `Analyzing ${agent.replace("Agent", "")} data...`,
+      duration: 3000,
+    });
+  } else if (status === "completed") {
+    if (agent !== "Synthesizer") {
+      const championInfo = CHAMPION_AGENTS[agent];
+      toast.success(`${championInfo.champion} Analysis Complete`, {
+        description: message || `${agent.replace("Agent", "")} insights ready`,
+        duration: 2500,
+      });
+    } else {
+      toast.success("Synthesis Complete!", {
+        description:
+          "All agent insights have been combined into your final analysis.",
+        duration: 4000,
+      });
+    }
+  }
+};
+
 // Helper function to get agent order for progression
 const getAgentOrder = (): AgentType[] => [
   "BuildAgent",
@@ -332,26 +389,22 @@ export const useHexCoreWebSocket = (): UseHexCoreWebSocketReturn => {
           });
         }
 
-        // Update active and completed agents
-        if (status === "processing" || status === "started") {
-          setAnimationState((prev) => ({
-            ...prev,
-            activeAgents: prev.activeAgents.includes(agent)
-              ? prev.activeAgents
-              : [...prev.activeAgents, agent],
-          }));
-        } else if (status === "completed") {
-          setAnimationState((prev) => ({
-            ...prev,
-            activeAgents: prev.activeAgents.filter((a) => a !== agent),
-            completedAgents: prev.completedAgents.includes(agent)
-              ? prev.completedAgents
-              : [...prev.completedAgents, agent],
-          }));
-        }
-
         return newProgress;
       });
+
+      // Update active and completed agents
+      setAnimationState((prev) => ({
+        ...prev,
+        activeAgents: updateActiveAgents(prev.activeAgents, agent, status),
+        completedAgents: updateCompletedAgents(
+          prev.completedAgents,
+          agent,
+          status
+        ),
+      }));
+
+      // Show toast notifications
+      showAgentToast(agent, status, message);
     }
   }, [lastMessage]);
 
