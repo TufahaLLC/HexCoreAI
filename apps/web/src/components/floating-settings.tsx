@@ -24,17 +24,13 @@ export default function FloatingSettings() {
             "z-50",
             "h-11",
             "w-11",
-            "rounded-full",
-            "border",
-            "border-border/60",
-            "bg-background/80",
-            "backdrop-blur",
+            "rounded-md",
             "shadow-lg",
             "transition",
-            "hover:bg-background"
+            "hover:bg-background/80"
           )}
           size="icon"
-          variant="outline"
+          variant="ghost"
         >
           <Settings aria-hidden className="h-5 w-5" />
           <span className="sr-only">Open settings</span>

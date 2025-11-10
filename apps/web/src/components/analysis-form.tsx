@@ -120,20 +120,29 @@ export const AnalysisForm = ({
             name="year"
             render={({ field }) => (
               <FormItem>
-                <FormControl>
-                  <Input
-                    className="h-11 transition-colors focus:ring-2 focus:ring-primary/20"
-                    disabled={isDisabled}
-                    max={2030}
-                    min={2020}
-                    placeholder="2024"
-                    type="number"
-                    {...field}
-                    onChange={(e) =>
-                      field.onChange(Number.parseInt(e.target.value, 10))
+                <Select
+                  defaultValue={field.value.toString()}
+                  disabled={isDisabled}
+                  onValueChange={(value) => {
+                    const yearValue = Number.parseInt(value, 10);
+                    if (!Number.isNaN(yearValue)) {
+                      field.onChange(yearValue);
                     }
-                  />
-                </FormControl>
+                  }}
+                >
+                  <FormControl>
+                    <SelectTrigger className="h-11 transition-colors focus:ring-2 focus:ring-primary/20">
+                      <SelectValue placeholder="Select year" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="2025">2025</SelectItem>
+                    <SelectItem value="2024">2024</SelectItem>
+                    <SelectItem value="2023">2023</SelectItem>
+                    <SelectItem value="2022">2022</SelectItem>
+                    <SelectItem value="2021">2021</SelectItem>
+                  </SelectContent>
+                </Select>
                 <FormMessage />
               </FormItem>
             )}

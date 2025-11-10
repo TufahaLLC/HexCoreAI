@@ -208,13 +208,8 @@ export async function getRegionByPuuid(
  * Fetch summoner rank data from Riot API
  * Dynamically fetches the active region for the PUUID
  */
-export async function getSummonerRank(
-  routingRegion: string,
-  puuid: string,
-  summonerId: string
-) {
-  const activeRegion = await getRegionByPuuid(routingRegion, puuid);
-  const url = `https://${activeRegion}.api.riotgames.com/lol/league/v4/entries/by-summoner/${summonerId}`;
+export async function getSummonerRank(region: string, puuid: string) {
+  const url = `https://${region}.api.riotgames.com/lol/league/v4/entries/by-puuid/${puuid}`;
   const entries: RiotLeagueEntry[] = await makeRequestWithRetry(url);
 
   // Find ranked solo/duo entry

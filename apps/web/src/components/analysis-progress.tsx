@@ -1,5 +1,6 @@
 "use client";
 
+import { motion } from "motion/react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -19,6 +20,12 @@ import { ZileanAnimation } from "./champion-animations/zilean-animation";
 import { HeimerdingerSynthesis } from "./heimerdinger-synthesis-animation";
 import { HextechHexagon } from "./hextech-hexagon";
 import { VelKozLaser } from "./vel-koz-laser";
+
+// Animation constants
+const HEXAGON_ENTRANCE_DURATION = 0.8;
+const HEXAGON_SCALE_FROM = 0.8;
+const HEXAGON_SCALE_TO = 1;
+const PROGRESS_TEXT_DELAY = 0.3;
 
 const DEFAULT_HEXAGON_SIZE = 300;
 
@@ -87,7 +94,15 @@ export const AnalysisProgress = () => {
       <CardContent className="space-y-6">
         {/* Hextech Visualization */}
         <div className="relative flex justify-center py-8">
-          <div className="relative">
+          <motion.div
+            animate={{ opacity: 1, scale: HEXAGON_SCALE_TO }}
+            className="relative"
+            initial={{ opacity: 0, scale: HEXAGON_SCALE_FROM }}
+            transition={{
+              duration: HEXAGON_ENTRANCE_DURATION,
+              ease: "easeOut",
+            }}
+          >
             {/* SVG Container */}
             <svg
               height={DEFAULT_HEXAGON_SIZE}
@@ -138,7 +153,15 @@ export const AnalysisProgress = () => {
             )}
 
             {/* Progress text overlay */}
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <motion.div
+              animate={{ opacity: 1, y: 0 }}
+              className="pointer-events-none absolute inset-0 flex items-center justify-center"
+              initial={{ opacity: 0, y: 10 }}
+              transition={{
+                delay: PROGRESS_TEXT_DELAY,
+                duration: 0.5,
+              }}
+            >
               <div className="text-center">
                 <div
                   className="font-bold text-4xl"
@@ -150,8 +173,8 @@ export const AnalysisProgress = () => {
                   {animationState.currentMessage}
                 </div>
               </div>
-            </div>
-          </div>
+            </motion.div>
+          </motion.div>
         </div>
 
         {/* Progress Bar with Dynamic Colors */}
