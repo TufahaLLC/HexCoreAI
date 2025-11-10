@@ -5,33 +5,24 @@ import { useMemo } from "react";
 
 type HextechHexagonProps = {
   size?: number;
-  progress: number;
-  isActive: boolean;
   glowColor?: string;
   championActive?: string | null;
+  laserRotation?: number; // Current laser rotation angle in degrees
 };
 
 const DEFAULT_SIZE = 400;
 const DEFAULT_GLOW_COLOR = "#32B8C6";
 const HEXAGON_RADIUS_OFFSET = 20;
 const HEXAGON_SIDES = 6;
-const HEXAGON_DIVISOR = 6;
-const ANGLE_OFFSET = Math.PI / HEXAGON_DIVISOR;
-const ROTATION_DEGREES = 360;
 const BACKGROUND_STROKE_WIDTH = 2;
 const PROGRESS_STROKE_WIDTH = 3;
 const GLOW_STD_DEVIATION = 4;
 const ANIMATION_DURATION_SECONDS = 2;
-const ROTATION_DURATION_SECONDS = 8;
 const CENTER_DOT_RADIUS = 4;
 const CHAMPION_GLOW_RADIUS_RATIO = 4;
 const CHAMPION_INNER_RADIUS_RATIO = 6;
 const CHAMPION_PULSE_MAX_RATIO = 5;
 const PULSE_DURATION_SECONDS = 1.5;
-const BACKGROUND_OPACITY_INACTIVE = 0.3;
-const BACKGROUND_OPACITY_ACTIVE = 0.6;
-const PROGRESS_OPACITY_INACTIVE = 0.5;
-const PROGRESS_OPACITY_ACTIVE = 1.0;
 const CHAMPION_GLOW_OPACITY = 0.4;
 const CHAMPION_INNER_OPACITY = 0.6;
 const CENTER_DOT_OPACITY = 0.8;
@@ -39,8 +30,13 @@ const GRADIENT_STOP_OFFSET_START = 0;
 const GRADIENT_STOP_OFFSET_END = 100;
 const STOP_OPACITY_MIN = 0.3;
 const STOP_OPACITY_MAX = 0.8;
-const PROGRESS_CLIP_ANIMATION_DURATION = 0.5;
-const PROGRESS_PERCENTAGE_DIVISOR = 100;
+const CHAMPION_ANIMATION_DURATION = 0.5;
+const DEGREES_PER_SIDE = 60;
+const TOP_ANGLE_OFFSET = -90;
+const FULL_CIRCLE_DEGREES = 360;
+const COLOR_TRANSITION_DURATION = 0.3;
+const PURPLE_COLOR = "#9333EA";
+const WHITE_COLOR = "#FFFFFF";
 
 // Animation timing configuration for 11-agent system
 const TOTAL_AGENT_COUNT = 11;
@@ -67,27 +63,42 @@ export const ANIMATION_CONFIG = {
 
 export function HextechHexagon({
   size = DEFAULT_SIZE,
-  progress,
-  isActive,
   glowColor = DEFAULT_GLOW_COLOR,
   championActive = null,
+  laserRotation = 0,
 }: HextechHexagonProps) {
   // Generate hexagon points
   const hexagonPoints = useMemo(() => {
-    const points: string[] = [];
+    const points: { x: number; y: number }[] = [];
     const centerX = size / 2;
     const centerY = size / 2;
     const radius = size / 2 - HEXAGON_RADIUS_OFFSET;
 
     for (let i = 0; i < HEXAGON_SIDES; i++) {
-      const angle = (Math.PI / HEXAGON_SIDES) * i - ANGLE_OFFSET;
+      const angle = ((2 * Math.PI) / HEXAGON_SIDES) * i - Math.PI / 2;
       const x = centerX + radius * Math.cos(angle);
       const y = centerY + radius * Math.sin(angle);
-      points.push(`${x},${y}`);
+      points.push({ x, y });
     }
 
-    return points.join(" ");
+    return points;
   }, [size]);
+
+  // Calculate which sides have been passed by the laser
+  const getSideColor = (sideIndex: number) => {
+    // Each side spans DEGREES_PER_SIDE degrees (360/6)
+    // Side 0 is at top, going clockwise
+    const sideAngle =
+      (sideIndex * DEGREES_PER_SIDE + TOP_ANGLE_OFFSET) % FULL_CIRCLE_DEGREES;
+    const normalizedSideAngle =
+      sideAngle < 0 ? sideAngle + FULL_CIRCLE_DEGREES : sideAngle;
+    const normalizedLaserAngle = laserRotation % FULL_CIRCLE_DEGREES;
+
+    // Check if laser has passed this side
+    const hasPassed = normalizedLaserAngle >= normalizedSideAngle;
+
+    return hasPassed ? PURPLE_COLOR : WHITE_COLOR;
+  };
 
   return (
     <svg
@@ -143,61 +154,42 @@ export function HextechHexagon({
             />
           </stop>
         </linearGradient>
-
-        {/* Clip path for progress */}
-        <clipPath id="progress-clip">
-          <motion.rect
-            animate={{ scaleX: progress / PROGRESS_PERCENTAGE_DIVISOR }}
-            height={size}
-            initial={{ scaleX: 0 }}
-            style={{ transformOrigin: "left center" }}
-            transition={{
-              duration: PROGRESS_CLIP_ANIMATION_DURATION,
-              ease: "easeInOut",
-            }}
-            width={size}
-            x="0"
-            y="0"
-          />
-        </clipPath>
       </defs>
 
-      {/* Background hexagon */}
-      <motion.polygon
-        animate={{
-          opacity: isActive
-            ? BACKGROUND_OPACITY_ACTIVE
-            : BACKGROUND_OPACITY_INACTIVE,
-        }}
+      {/* Background full hexagon to ensure complete shape */}
+      <polygon
         fill="none"
-        opacity={BACKGROUND_OPACITY_INACTIVE}
-        points={hexagonPoints}
-        stroke={glowColor}
+        filter="url(#hextech-glow)"
+        points={hexagonPoints.map((p) => `${p.x},${p.y}`).join(" ")}
+        stroke={WHITE_COLOR}
+        strokeLinejoin="round"
         strokeWidth={BACKGROUND_STROKE_WIDTH}
       />
 
-      {/* Progress hexagon with gradient */}
-      <motion.polygon
-        animate={{
-          opacity: isActive
-            ? PROGRESS_OPACITY_ACTIVE
-            : PROGRESS_OPACITY_INACTIVE,
-          rotate: isActive ? ROTATION_DEGREES : 0,
-        }}
-        clipPath="url(#progress-clip)"
-        fill="none"
-        filter="url(#hextech-glow)"
-        points={hexagonPoints}
-        stroke="url(#hextech-gradient)"
-        strokeWidth={PROGRESS_STROKE_WIDTH}
-        transition={{
-          rotate: {
-            duration: ROTATION_DURATION_SECONDS,
-            repeat: Number.POSITIVE_INFINITY,
-            ease: "linear",
-          },
-        }}
-      />
+      {/* Hexagon sides - each side colored individually based on laser position */}
+      {hexagonPoints.map((point, i) => {
+        const nextPoint = hexagonPoints[(i + 1) % HEXAGON_SIDES];
+        const sideColor = getSideColor(i);
+
+        return (
+          <motion.line
+            animate={{ stroke: sideColor }}
+            filter="url(#hextech-glow)"
+            key={`hexagon-side-${point.x}-${point.y}-${nextPoint.x}-${nextPoint.y}`}
+            stroke={sideColor}
+            strokeLinecap="round"
+            strokeWidth={PROGRESS_STROKE_WIDTH}
+            transition={{
+              duration: COLOR_TRANSITION_DURATION,
+              ease: "easeInOut",
+            }}
+            x1={point.x}
+            x2={nextPoint.x}
+            y1={point.y}
+            y2={nextPoint.y}
+          />
+        );
+      })}
 
       {/* Champion indicator - shows when champion is active */}
       {championActive && (
@@ -205,7 +197,7 @@ export function HextechHexagon({
           animate={{ opacity: 1, scale: 1 }}
           initial={{ opacity: 0, scale: 0 }}
           transition={{
-            duration: PROGRESS_CLIP_ANIMATION_DURATION,
+            duration: CHAMPION_ANIMATION_DURATION,
             type: "spring",
           }}
         >

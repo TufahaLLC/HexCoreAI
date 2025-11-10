@@ -9,7 +9,6 @@ import { AnalysisResults } from "@/components/analysis-results";
 import { ConnectionStatus } from "@/components/connection-status";
 import { HextechHexagon } from "@/components/hextech-hexagon";
 import { MessageHistory } from "@/components/message-history";
-import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
@@ -68,7 +67,6 @@ export const AnalysisDashboard = () => {
     progress,
     currentChampion,
     currentLaserColor,
-    agentProgress,
     error,
   } = useHexCoreWebSocket();
 
@@ -76,6 +74,9 @@ export const AnalysisDashboard = () => {
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [pendingFormData, setPendingFormData] =
     useState<AnalysisFormData | null>(null);
+
+  // Track laser rotation for hexagon coloring
+  const [laserRotation, setLaserRotation] = useState(0);
 
   // Handle form submission - show confirmation dialog
   const handleFormSubmit = (data: AnalysisFormData) => {
@@ -196,7 +197,7 @@ export const AnalysisDashboard = () => {
         {isActuallyConnected && (
           <motion.div
             animate={{ opacity: 1, scale: 1 }}
-            className="flex min-h-screen items-center justify-center"
+            className="fixed inset-0 flex flex-col"
             exit={{ opacity: 0, scale: 0.95 }}
             initial={{ opacity: 0, scale: 0.95 }}
             key="center-progress"
@@ -206,142 +207,81 @@ export const AnalysisDashboard = () => {
               ease: "easeOut",
             }}
           >
-            <div className="w-full max-w-2xl">
-              {/* Simplified AnalysisProgress - Centered Hexagon Only */}
-              <Card className="border-0 bg-transparent shadow-none">
-                <CardContent className="p-0">
-                  <div className="relative flex justify-center py-8">
-                    <motion.div
-                      animate={{ opacity: 1, scale: HEXAGON_SCALE_TO }}
-                      className="relative"
-                      initial={{ opacity: 0, scale: HEXAGON_SCALE_FROM }}
-                      transition={{
-                        duration: HEXAGON_ENTRANCE_DURATION,
-                        ease: "easeOut",
-                      }}
-                    >
-                      {/* SVG Container */}
-                      <svg
-                        height={DEFAULT_HEXAGON_SIZE}
-                        viewBox={`0 0 ${DEFAULT_HEXAGON_SIZE} ${DEFAULT_HEXAGON_SIZE}`}
-                        width={DEFAULT_HEXAGON_SIZE}
-                      >
-                        <title>Hextech Analysis Visualization</title>
-                        <HextechHexagon
-                          championActive={currentChampion}
-                          glowColor={currentLaserColor}
-                          isActive={isProcessing}
-                          progress={progress}
-                          size={DEFAULT_HEXAGON_SIZE}
-                        />
-                        <VelKozLaser
-                          isActive={isProcessing}
-                          laserColor={currentLaserColor}
-                          progress={progress}
-                          rotationSpeed={20}
-                          size={DEFAULT_HEXAGON_SIZE}
-                        />
-                      </svg>
+            {/* Full Screen Hexagon Container */}
+            <div className="relative flex flex-1 items-center justify-center overflow-hidden">
+              <motion.div
+                animate={{ opacity: 1, scale: HEXAGON_SCALE_TO }}
+                className="relative"
+                initial={{ opacity: 0, scale: HEXAGON_SCALE_FROM }}
+                style={{ width: "90vh", height: "90vh" }}
+                transition={{
+                  duration: HEXAGON_ENTRANCE_DURATION,
+                  ease: "easeOut",
+                }}
+              >
+                {/* SVG Container - Full Screen */}
+                <svg
+                  className="h-full w-full"
+                  preserveAspectRatio="xMidYMid meet"
+                  viewBox={`0 0 ${DEFAULT_HEXAGON_SIZE} ${DEFAULT_HEXAGON_SIZE}`}
+                >
+                  <title>Hextech Analysis Visualization</title>
+                  <HextechHexagon
+                    championActive={currentChampion}
+                    glowColor="#FFFFFF"
+                    laserRotation={laserRotation}
+                    size={DEFAULT_HEXAGON_SIZE}
+                  />
+                  <VelKozLaser
+                    isActive={isProcessing}
+                    onRotationUpdate={setLaserRotation}
+                    progress={progress}
+                    rotationSpeed={20}
+                    size={DEFAULT_HEXAGON_SIZE}
+                  />
+                </svg>
+              </motion.div>
 
-                      {/* Progress text overlay */}
-                      <motion.div
-                        animate={{ opacity: 1, y: 0 }}
-                        className="pointer-events-none absolute inset-0 flex items-center justify-center"
-                        initial={{ opacity: 0, y: 10 }}
-                        transition={{
-                          delay: PROGRESS_TEXT_DELAY,
-                          duration: 0.5,
-                        }}
-                      >
-                        <div className="text-center">
-                          <div
-                            className="font-bold text-4xl"
-                            style={{ color: currentLaserColor }}
-                          >
-                            {Math.round(progress)}%
-                          </div>
-                          <div className="mt-2 text-muted-foreground text-sm">
-                            {animationState.currentMessage}
-                          </div>
-                        </div>
-                      </motion.div>
-                    </motion.div>
-                  </div>
-
-                  {/* Progress Bar */}
-                  <div className="space-y-2">
-                    <Progress
-                      className="w-full"
-                      style={{
-                        backgroundColor: `${currentLaserColor}20`,
-                      }}
-                      value={progress}
-                    />
-                  </div>
-
-                  {/* Completion State */}
-                  {isComplete && (
-                    <div className="mt-4 text-center font-semibold text-green-500">
-                      ✓ Analysis Complete!
-                    </div>
-                  )}
-
-                  {/* Error State */}
-                  {error && (
-                    <div className="mt-4 text-center font-semibold text-red-500">
-                      Error: {error}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Agent Progress Display */}
-              {agentProgress.size > 0 && (
-                <Card className="mt-6">
-                  <CardContent className="pt-6">
-                    <div className="space-y-2">
-                      <h3 className="font-semibold">Agent Progress</h3>
-                      <div className="space-y-2">
-                        {Array.from(agentProgress.entries()).map(
-                          ([agent, progressData]) => (
-                            <div
-                              className="flex items-center gap-3 rounded-lg border p-2"
-                              key={agent}
-                              style={{
-                                borderColor: `${progressData.laserColor}40`,
-                                backgroundColor: `${progressData.laserColor}10`,
-                              }}
-                            >
-                              <Badge
-                                style={{
-                                  borderColor: progressData.laserColor,
-                                  color: progressData.laserColor,
-                                }}
-                                variant="outline"
-                              >
-                                {progressData.champion}
-                              </Badge>
-                              <span className="text-muted-foreground text-sm">
-                                ({agent})
-                              </span>
-                              <div className="flex-1 text-right">
-                                <span className="font-medium text-sm">
-                                  {progressData.status === "completed" &&
-                                    "✓ Complete"}
-                                  {progressData.status === "processing" &&
-                                    `${progressData.progress}%`}
-                                  {progressData.status === "started" &&
-                                    "Initializing..."}
-                                </span>
-                              </div>
-                            </div>
-                          )
-                        )}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+              {/* Completion State */}
+              {isComplete && (
+                <div className="-translate-y-1/2 absolute inset-x-0 top-1/2 text-center font-semibold text-6xl text-green-500">
+                  ✓ Analysis Complete!
+                </div>
               )}
+
+              {/* Error State */}
+              {error && (
+                <div className="-translate-y-1/2 absolute inset-x-0 top-1/2 text-center font-semibold text-4xl text-red-500">
+                  Error: {error}
+                </div>
+              )}
+            </div>
+
+            {/* Status Message and Progress Bar at Bottom */}
+            <div className="w-full space-y-3 px-8 pb-8">
+              {/* Status Message */}
+              <motion.div
+                animate={{ opacity: 1, y: 0 }}
+                className="text-center"
+                initial={{ opacity: 0, y: 10 }}
+                transition={{
+                  delay: PROGRESS_TEXT_DELAY,
+                  duration: 0.5,
+                }}
+              >
+                <div className="font-medium text-lg text-white/90">
+                  {animationState.currentMessage}
+                </div>
+              </motion.div>
+
+              {/* Progress Bar */}
+              <Progress
+                className="h-3 w-full"
+                style={{
+                  backgroundColor: `${currentLaserColor}20`,
+                }}
+                value={progress}
+              />
             </div>
           </motion.div>
         )}

@@ -35,7 +35,12 @@ Step Functions (Express)
     │   ├─ Vision Orchestrator → Bedrock Vision Agent (streaming traces)
     │   ├─ Economy Orchestrator → Bedrock Economy Agent (streaming traces)
     │   ├─ Champion Orchestrator → Bedrock Champion Agent (streaming traces)
-    │   └─ Competitive Orchestrator → Bedrock Competitive Agent (streaming traces)
+    │   ├─ Competitive Orchestrator → Bedrock Competitive Agent (streaming traces)
+    │   ├─ Adaptation Orchestrator → Bedrock Adaptation Agent (streaming traces)
+    │   ├─ Macro Orchestrator → Bedrock Macro Agent (streaming traces)
+    │   ├─ Positioning Orchestrator → Bedrock Positioning Agent (streaming traces)
+    │   ├─ Synergy Orchestrator → Bedrock Synergy Agent (streaming traces)
+    │   └─ Temporal Orchestrator → Bedrock Temporal Agent (streaming traces)
     │   (Each orchestrator sends rich WebSocket updates: reasoning, tool start/complete)
     │   └─→ DynamoDB: AgentSessions table (register/complete, TTL 24h)
     ├─→ Synthesizer Task
@@ -76,6 +81,7 @@ Supporting Tables:
 
 ### DynamoDB: Connections Table
 - **Purpose**: Stores active WebSocket connectionIds for routing updates
+- **Table Name**: `HexCore-Connections`
 - **Schema**:
   - Partition Key: `connectionId` (String)
   - Attributes: `sessionId`, `puuid`, `connectedAt`, `ttl`
@@ -110,6 +116,7 @@ Supporting Tables:
 
 ### DynamoDB: MatchData Table
 - **Purpose**: Stores filtered match slices for fast agent reads
+- **Table Name**: `HexCore-MatchData`
 - **Schema**:
   - Partition Key: `dataKey` (String) - format: `match:{matchId}:puuid:{puuid}`
   - Attributes: Filtered JSON documents grouped by agent domain (build, combat, vision, economy, championMeta)
@@ -120,10 +127,11 @@ Supporting Tables:
 
 ### DynamoDB: AgentSessions Table
 - **Purpose**: Tracks Bedrock Agent session lifecycle for each orchestrator invocation
+- **Table Name**: `HexCore-AgentSessions`
 - **Schema**:
   - Partition Key: `sessionId` (String) - Bedrock session identifier per agent run
   - Attributes: `agentType`, `userSessionId` (WebSocket session), `matchId`, `createdAt`, `ttl`, `status`, `completedAt`, `errorMessage`
-  - GSI: `UserSessionIndex` on (`userSessionId` HASH, `createdAt` RANGE) for per-user queries
+  - GSI: `MatchIndex` on (`matchId` HASH, `createdAt` RANGE) for per-match queries
 - **TTL**: 24 hours (automatic cleanup)
 - **Capacity**: On-demand mode
 
@@ -147,7 +155,7 @@ Supporting Tables:
 ### Step Functions: Multi-Agent Orchestration
 - **Workflow type**: Express Workflow (high-volume, short-duration)
 - **Structure**:
-  1. **Parallel State**: Fan out to 6 Agent Orchestrator Lambdas concurrently
+  1. **Parallel State**: Fan out to 11 Agent Orchestrator Lambdas concurrently
      - Each orchestrator reads from DynamoDB using provided keys
      - Each orchestrator invokes a Bedrock Agent with streaming trace events and sends rich WebSocket updates (reasoning, tool start/complete) within assigned progress windows
      - Orchestrators register/update session lifecycle in AgentSessions (start, complete/failed)
@@ -159,15 +167,23 @@ Supporting Tables:
 - **Timeout**: 5 minutes total execution time
 - **IAM**: Lambda invoke, DynamoDB read, S3/DynamoDB write, execute-api:ManageConnections
 
-### Agent Orchestrators (6 agents)
+### Agent Orchestrators (11 agents)
 Agent domains:
 
+**Core Analysis Agents (6)**:
 1. **Build Optimization Agent**: Analyzes itemization paths, build efficiency, power spikes
 2. **Combat Analysis Agent**: Evaluates KDA, damage patterns, combat participation
 3. **Vision Control Agent**: Assesses ward placement, vision score, map control
 4. **Economy Management Agent**: Tracks gold efficiency, CS patterns, resource optimization
 5. **Champion Meta Agent**: Contextualizes performance against champion benchmarks
 6. **Competitive Insight Agent**: Analyzes rank-appropriate strategies and improvement areas
+
+**Advanced Analysis Agents (5)**:
+7. **Adaptation Agent**: Analyzes player adaptation to game state changes and enemy strategies
+8. **Macro Strategy Agent**: Evaluates macro decision-making, objective control, and strategic positioning
+9. **Positioning Agent**: Assesses combat positioning, team fight placement, and map awareness
+10. **Synergy Agent**: Analyzes team composition synergy and champion interaction effectiveness
+11. **Temporal Agent**: Examines timing patterns, power spike windows, and game phase transitions
 
 **Agent orchestrator responsibilities**:
 - Read filtered match data from DynamoDB using provided keys
@@ -193,6 +209,29 @@ Agent domains:
 - **S3**: Stores complete synthesis reports at `results/{puuid}/{matchId}.json` (includes all agent results and summary)
 - **DynamoDB (AnalysisResults)**: Stores summary metadata with 90-day TTL (`expiresAt`) and `resultId = {puuid}-{matchId}-{timestamp}` for quick retrieval
 - **Access pattern**: Query by `puuid` and/or `resultId` for efficient client lookups; idempotent writes with conditional expressions
+
+### Additional DynamoDB Tables
+- **HexCore-Idempotency**: Lambda Powertools idempotency tracking with TTL on `expiration` attribute
+- **HexCore-ExternalDataCache**: Caches external API responses (champion data, rank metadata) with TTL for performance optimization
+
+## Implementation Notes
+
+### Architecture Alignment
+This architecture document accurately reflects the implemented AWS infrastructure with the following enhancements:
+
+**Expanded Agent Coverage**: The implementation includes 11 agents (6 core + 5 advanced) rather than the originally planned 6, providing deeper analysis capabilities:
+- **Core agents** cover fundamental gameplay aspects (build, combat, vision, economy, champion, competitive)
+- **Advanced agents** provide sophisticated insights (adaptation, macro strategy, positioning, synergy, temporal analysis)
+
+**Table Naming Convention**: All DynamoDB tables use the `HexCore-` prefix for consistent naming and resource organization:
+- `HexCore-Connections` (WebSocket connection tracking)
+- `HexCore-MatchData` (Filtered match data for agents)
+- `HexCore-AgentSessions` (Bedrock agent session lifecycle)
+- `HexCore-AnalysisResults` (Final synthesis metadata)
+- `HexCore-Idempotency` (Lambda idempotency tracking)
+- `HexCore-ExternalDataCache` (External API response caching)
+
+**AgentSessions GSI Optimization**: The implementation uses `MatchIndex` (matchId, createdAt) instead of `UserSessionIndex` for more efficient per-match session queries and analysis.
 
 ## End-to-End Flow
 
@@ -428,7 +467,7 @@ Client closes connection or 2-hour timeout triggers:
 ### Step Functions
 - **Workflow type**: Express (sub-5 minute executions)
 - **Timeout**: 300 seconds (5 minutes)
-- **Parallel state MaxConcurrency**: 6 (one per agent)
+- **Parallel state MaxConcurrency**: 11 (one per agent)
 - **Retry policy**: ExponentialBackoff with 3 attempts
 - **Catch blocks**: Per-agent graceful degradation
 

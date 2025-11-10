@@ -37,7 +37,9 @@ export type CompletedAnalysis = {
     };
     agents: Array<{
       agentName: string;
-      status: string;
+      status: "success" | "failed" | "partial";
+      analysis: string;
+      timestamp: number;
     }>;
   };
 };
