@@ -17,7 +17,6 @@ import {
   filterMatchData,
   getMatchData,
   getMatchTimeline,
-  getSummonerByPuuid,
   getSummonerRank,
 } from "../shared/riot-api";
 import { type SQSMatchMessage, sqsMatchMessageSchema } from "../shared/schemas";
@@ -50,27 +49,25 @@ const processMatchIdempotent = makeIdempotent(
     });
 
     try {
-      // Fetch match data, timeline, and summoner data in parallel
+      // Fetch match data and timeline in parallel
       const results = await Promise.all([
         getMatchData(region, matchId),
         getMatchTimeline(region, matchId),
-        getSummonerByPuuid(region, puuid),
       ]);
 
-      const [matchData, timelineData, summonerData] = results as [
+      const [matchData, timelineData] = results as [
         Awaited<ReturnType<typeof getMatchData>>,
         Awaited<ReturnType<typeof getMatchTimeline>>,
-        Awaited<ReturnType<typeof getSummonerByPuuid>>,
       ];
 
-      // Fetch rank data (not parallelized because it needs summonerId)
+      // Fetch rank data using PUUID directly
       let rankData: RankInfoData;
       try {
-        rankData = await getSummonerRank(region, summonerData.id);
+        rankData = await getSummonerRank(region, puuid);
       } catch (rankError) {
         logger.warn("Failed to fetch rank data, using default", {
           error: rankError,
-          summonerId: summonerData.id,
+          puuid,
         });
         rankData = {
           tier: "UNRANKED",

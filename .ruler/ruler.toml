@@ -28,6 +28,14 @@ args = ["awslabs.aws-documentation-mcp-server@latest"]
 command = "npx"
 args = ["shadcn@latest", "mcp"]
 
+[mcp_servers.cloudwatch-mcp-server]
+command = "uvx"
+args = ["awslabs.cloudwatch-mcp-server@latest"]
+env = { AWS_PROFILE = "dev", FASTMCP_LOG_LEVEL = "ERROR" }
+transportType = "stdio"
+autoApprove = []
+
+
 # --- Agent-Specific Configurations ---
 [agents.claude]
 enabled = true
