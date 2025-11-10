@@ -27,9 +27,6 @@ export const AnalysisDashboard = () => {
     gameName,
     tagLine,
 
-    // Progress
-    progress,
-
     // Results
     completedAnalysis,
 
@@ -98,7 +95,7 @@ export const AnalysisDashboard = () => {
       )}
 
       {/* Progress Section */}
-      {isConnected && <AnalysisProgress progress={progress} />}
+      {isConnected && <AnalysisProgress />}
 
       {/* Completed Analysis Results */}
       {completedAnalysis && <AnalysisResults analysis={completedAnalysis} />}
