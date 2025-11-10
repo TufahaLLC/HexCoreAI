@@ -31,7 +31,8 @@ phases/
 ├── phase-08/          # Results Aggregation & Synthesis
 ├── phase-09/          # User Validation & Testing
 ├── phase-10/          # Client Web App (Next.js) WebSocket Integration
-└── phase-11/          # Multi-Agent System Expansion with Third-Party API Integration
+├── phase-11/          # Multi-Agent System Expansion with Third-Party API Integration
+└── phase-12/          # UI Enhancements - WebSocket Animation System
 ```
 
 ## Phase Overview
@@ -144,6 +145,20 @@ Integrates community data sources (U.GG, OP.GG, Community Dragon, Data Dragon, L
 - Task 11.4: Implement Orchestrators for New Specialized Agents
 - Task 11.5: Updated Riot API Client Module
 
+### [Phase 12: UI Enhancements - WebSocket Animation System](./phase-12/)
+**Status:** Ready  
+**Tasks:** 7
+
+Implements a League of Legends Hextech-themed animation system that synchronizes with WebSocket processing states, featuring champion-themed specialized agents with unique animations and dynamic Vel'Koz laser transitions.
+
+- Task 12.1: Install Animation Dependencies
+- Task 12.2: Create Enhanced WebSocket State Management Hook
+- Task 12.3: Implement Core Animation Components
+- Task 12.4: Implement Champion Animation Components
+- Task 12.5: Implement Heimerdinger Synthesis Animation
+- Task 12.6: Update Analysis Progress Component
+- Task 12.7: Testing & Polish
+
 ## End-to-End WebSocket Analysis Flow (once all phases are complete)
 
 This section describes the full, single-request flow from the client through to final results delivery over WebSocket, as implemented across Phases 1–9.
@@ -249,11 +264,12 @@ sequenceDiagram
 
 ## Progress Summary
 
-- **Total Phases:** 11
-- **Total Tasks (Phases 1–8):** 41
+- **Total Phases:** 12
+- **Total Tasks (Phases 1–12):** 53
 - **Completed Tasks:** 23
 - **In Progress:** 18
-- **Overall Progress:** ~56% complete
+- **Ready/Pending:** 12
+- **Overall Progress:** ~43% complete
 
 ## Navigation Guide
 
