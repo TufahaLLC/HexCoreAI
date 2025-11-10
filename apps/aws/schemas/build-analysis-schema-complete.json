@@ -1,0 +1,340 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Build Analysis Tools API",
+    "version": "1.0.0",
+    "description": "Tools for analyzing build paths, itemization, and gold efficiency"
+  },
+  "paths": {
+    "/getMatchBuildData": {
+      "post": {
+        "summary": "Get Match Build Data",
+        "description": "Retrieve build and itemization data for a specific match",
+        "operationId": "getMatchBuildData",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "matchId": {
+                    "type": "string",
+                    "description": "The match ID"
+                  },
+                  "puuid": {
+                    "type": "string",
+                    "description": "The player UUID"
+                  }
+                },
+                "required": ["matchId", "puuid"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/analyzeBuildEfficiency": {
+      "post": {
+        "summary": "Analyze Build Efficiency",
+        "description": "Analyze build path efficiency and optimization opportunities",
+        "operationId": "analyzeBuildEfficiency",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "itemTimelineJson": {
+                    "type": "string",
+                    "description": "JSON string of item timeline array"
+                  },
+                  "goldPerMinuteJson": {
+                    "type": "string",
+                    "description": "JSON string of gold per minute array"
+                  }
+                },
+                "required": ["itemTimelineJson", "goldPerMinuteJson"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/recommendItemAdaptations": {
+      "post": {
+        "summary": "Recommend Item Adaptations",
+        "description": "Generate situational item recommendations based on enemy composition",
+        "operationId": "recommendItemAdaptations",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "currentBuild": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    },
+                    "description": "Array of current item IDs"
+                  },
+                  "enemyChampions": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Array of enemy champion names"
+                  }
+                },
+                "required": ["currentBuild", "enemyChampions"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/getOptimalBuildFromMeta": {
+      "post": {
+        "summary": "Get Optimal Build From Meta",
+        "description": "Retrieve optimal build recommendations from meta sources based on champion, role, and rank",
+        "operationId": "getOptimalBuildFromMeta",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "championName": {
+                    "type": "string",
+                    "description": "The champion name"
+                  },
+                  "role": {
+                    "type": "string",
+                    "description": "The role (e.g., TOP, JUNGLE, MID, ADC, SUPPORT)"
+                  },
+                  "rank": {
+                    "type": "string",
+                    "description": "The rank tier (e.g., IRON, BRONZE, SILVER, GOLD, PLATINUM, DIAMOND, MASTER, GRANDMASTER, CHALLENGER)"
+                  }
+                },
+                "required": ["championName", "role", "rank"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/comparePlayerBuildToMeta": {
+      "post": {
+        "summary": "Compare Player Build To Meta",
+        "description": "Compare player's build to meta-optimal build and identify deviations",
+        "operationId": "comparePlayerBuildToMeta",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "playerItemsJson": {
+                    "type": "string",
+                    "description": "JSON string of player's item IDs"
+                  },
+                  "championName": {
+                    "type": "string",
+                    "description": "The champion name"
+                  },
+                  "role": {
+                    "type": "string",
+                    "description": "The role"
+                  }
+                },
+                "required": ["playerItemsJson", "championName", "role"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/getCounterBuildRecommendations": {
+      "post": {
+        "summary": "Get Counter Build Recommendations",
+        "description": "Get matchup-specific build recommendations to counter enemy team composition",
+        "operationId": "getCounterBuildRecommendations",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "championName": {
+                    "type": "string",
+                    "description": "The champion name"
+                  },
+                  "enemyChampionsJson": {
+                    "type": "string",
+                    "description": "JSON string of enemy champion names"
+                  },
+                  "role": {
+                    "type": "string",
+                    "description": "The role"
+                  }
+                },
+                "required": ["championName", "enemyChampionsJson", "role"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/analyzeBuildAdaptationSpeed": {
+      "post": {
+        "summary": "Analyze Build Adaptation Speed",
+        "description": "Analyze player's ability to adapt builds across different matches and situations",
+        "operationId": "analyzeBuildAdaptationSpeed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "matchHistoryJson": {
+                    "type": "string",
+                    "description": "JSON string of match history with items and results"
+                  }
+                },
+                "required": ["matchHistoryJson"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/getItemGoldEfficiency": {
+      "post": {
+        "summary": "Get Item Gold Efficiency",
+        "description": "Calculate gold efficiency for specific items based on their stats and cost",
+        "operationId": "getItemGoldEfficiency",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "itemIdsJson": {
+                    "type": "string",
+                    "description": "JSON string of item IDs to analyze"
+                  }
+                },
+                "required": ["itemIdsJson"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

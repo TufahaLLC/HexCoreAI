@@ -1,0 +1,302 @@
+# Task 6.1: Create Step Functions Definition ✅
+
+Define the Step Functions state machine for multi-agent orchestration.
+
+**Subtasks:**
+- [x] Create `statemachine/multi-agent-orchestration.asl.json` file
+- [x] Define ParallelAgentExecution state with 6 branches
+- [x] For each agent branch:
+  - [x] Create Task state with Lambda invoke
+  - [x] Configure payload with keys, sessionId, matchId, puuid
+  - [x] Add Retry policy (3 attempts, exponential backoff)
+  - [x] Add Catch block routing to Failed pass state
+  - [x] Set ResultPath to store agent output
+- [x] Define Synthesizer task state
+- [x] Configure retry and error handling for Synthesizer
+- [x] Use parameter substitution for Lambda ARNs
+
+**statemachine/multi-agent-orchestration.asl.json:**
+```json
+{
+  "Comment": "Multi-agent orchestration for match analysis",
+  "StartAt": "ParallelAgentExecution",
+  "States": {
+    "ParallelAgentExecution": {
+      "Type": "Parallel",
+      "Branches": [
+        {
+          "StartAt": "BuildAgent",
+          "States": {
+            "BuildAgent": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::lambda:invoke",
+              "Parameters": {
+                "FunctionName": "${BuildAgentOrchestratorArn}",
+                "Payload": {
+                  "keys.$": "$.detail.keys",
+                  "sessionId.$": "$.detail.sessionId",
+                  "matchId.$": "$.detail.matchId",
+                  "puuid.$": "$.detail.puuid"
+                }
+              },
+              "Retry": [
+                {
+                  "ErrorEquals": ["States.TaskFailed"],
+                  "IntervalSeconds": 2,
+                  "MaxAttempts": 3,
+                  "BackoffRate": 2
+                }
+              ],
+              "Catch": [
+                {
+                  "ErrorEquals": ["States.ALL"],
+                  "ResultPath": "$.error",
+                  "Next": "BuildAgentFailed"
+                }
+              ],
+              "ResultPath": "$.buildResult",
+              "End": true
+            },
+            "BuildAgentFailed": {
+              "Type": "Pass",
+              "Result": {"status": "failed", "agent": "build"},
+              "ResultPath": "$.buildResult",
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "CombatAgent",
+          "States": {
+            "CombatAgent": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::lambda:invoke",
+              "Parameters": {
+                "FunctionName": "${CombatAgentOrchestratorArn}",
+                "Payload": {
+                  "keys.$": "$.detail.keys",
+                  "sessionId.$": "$.detail.sessionId",
+                  "matchId.$": "$.detail.matchId",
+                  "puuid.$": "$.detail.puuid"
+                }
+              },
+              "Retry": [
+                {
+                  "ErrorEquals": ["States.TaskFailed"],
+                  "IntervalSeconds": 2,
+                  "MaxAttempts": 3,
+                  "BackoffRate": 2
+                }
+              ],
+              "Catch": [
+                {
+                  "ErrorEquals": ["States.ALL"],
+                  "ResultPath": "$.error",
+                  "Next": "CombatAgentFailed"
+                }
+              ],
+              "ResultPath": "$.combatResult",
+              "End": true
+            },
+            "CombatAgentFailed": {
+              "Type": "Pass",
+              "Result": {"status": "failed", "agent": "combat"},
+              "ResultPath": "$.combatResult",
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "VisionAgent",
+          "States": {
+            "VisionAgent": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::lambda:invoke",
+              "Parameters": {
+                "FunctionName": "${VisionAgentOrchestratorArn}",
+                "Payload": {
+                  "keys.$": "$.detail.keys",
+                  "sessionId.$": "$.detail.sessionId",
+                  "matchId.$": "$.detail.matchId",
+                  "puuid.$": "$.detail.puuid"
+                }
+              },
+              "Retry": [
+                {
+                  "ErrorEquals": ["States.TaskFailed"],
+                  "IntervalSeconds": 2,
+                  "MaxAttempts": 3,
+                  "BackoffRate": 2
+                }
+              ],
+              "Catch": [
+                {
+                  "ErrorEquals": ["States.ALL"],
+                  "ResultPath": "$.error",
+                  "Next": "VisionAgentFailed"
+                }
+              ],
+              "ResultPath": "$.visionResult",
+              "End": true
+            },
+            "VisionAgentFailed": {
+              "Type": "Pass",
+              "Result": {"status": "failed", "agent": "vision"},
+              "ResultPath": "$.visionResult",
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "EconomyAgent",
+          "States": {
+            "EconomyAgent": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::lambda:invoke",
+              "Parameters": {
+                "FunctionName": "${EconomyAgentOrchestratorArn}",
+                "Payload": {
+                  "keys.$": "$.detail.keys",
+                  "sessionId.$": "$.detail.sessionId",
+                  "matchId.$": "$.detail.matchId",
+                  "puuid.$": "$.detail.puuid"
+                }
+              },
+              "Retry": [
+                {
+                  "ErrorEquals": ["States.TaskFailed"],
+                  "IntervalSeconds": 2,
+                  "MaxAttempts": 3,
+                  "BackoffRate": 2
+                }
+              ],
+              "Catch": [
+                {
+                  "ErrorEquals": ["States.ALL"],
+                  "ResultPath": "$.error",
+                  "Next": "EconomyAgentFailed"
+                }
+              ],
+              "ResultPath": "$.economyResult",
+              "End": true
+            },
+            "EconomyAgentFailed": {
+              "Type": "Pass",
+              "Result": {"status": "failed", "agent": "economy"},
+              "ResultPath": "$.economyResult",
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "ChampionAgent",
+          "States": {
+            "ChampionAgent": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::lambda:invoke",
+              "Parameters": {
+                "FunctionName": "${ChampionAgentOrchestratorArn}",
+                "Payload": {
+                  "keys.$": "$.detail.keys",
+                  "sessionId.$": "$.detail.sessionId",
+                  "matchId.$": "$.detail.matchId",
+                  "puuid.$": "$.detail.puuid"
+                }
+              },
+              "Retry": [
+                {
+                  "ErrorEquals": ["States.TaskFailed"],
+                  "IntervalSeconds": 2,
+                  "MaxAttempts": 3,
+                  "BackoffRate": 2
+                }
+              ],
+              "Catch": [
+                {
+                  "ErrorEquals": ["States.ALL"],
+                  "ResultPath": "$.error",
+                  "Next": "ChampionAgentFailed"
+                }
+              ],
+              "ResultPath": "$.championResult",
+              "End": true
+            },
+            "ChampionAgentFailed": {
+              "Type": "Pass",
+              "Result": {"status": "failed", "agent": "champion"},
+              "ResultPath": "$.championResult",
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "CompetitiveAgent",
+          "States": {
+            "CompetitiveAgent": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::lambda:invoke",
+              "Parameters": {
+                "FunctionName": "${CompetitiveAgentOrchestratorArn}",
+                "Payload": {
+                  "keys.$": "$.detail.keys",
+                  "sessionId.$": "$.detail.sessionId",
+                  "matchId.$": "$.detail.matchId",
+                  "puuid.$": "$.detail.puuid"
+                }
+              },
+              "Retry": [
+                {
+                  "ErrorEquals": ["States.TaskFailed"],
+                  "IntervalSeconds": 2,
+                  "MaxAttempts": 3,
+                  "BackoffRate": 2
+                }
+              ],
+              "Catch": [
+                {
+                  "ErrorEquals": ["States.ALL"],
+                  "ResultPath": "$.error",
+                  "Next": "CompetitiveAgentFailed"
+                }
+              ],
+              "ResultPath": "$.competitiveResult",
+              "End": true
+            },
+            "CompetitiveAgentFailed": {
+              "Type": "Pass",
+              "Result": {"status": "failed", "agent": "competitive"},
+              "ResultPath": "$.competitiveResult",
+              "End": true
+            }
+          }
+        }
+      ],
+      "ResultPath": "$.agentResults",
+      "Next": "Synthesizer"
+    },
+    "Synthesizer": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${SynthesizerFunctionArn}",
+        "Payload": {
+          "agentResults.$": "$.agentResults",
+          "sessionId.$": "$.detail.sessionId",
+          "matchId.$": "$.detail.matchId",
+          "puuid.$": "$.detail.puuid"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": ["States.TaskFailed"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "ResultPath": "$.synthesisResult",
+      "End": true
+    }
+  }
+}
+```

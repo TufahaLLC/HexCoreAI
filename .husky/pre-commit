@@ -1,0 +1,10 @@
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+echo " Running lint-staged checks..."
+if pnpm lint-staged; then
+  echo " Pre-commit checks passed. Committing!"
+else
+  echo " Pre-commit checks failed. Fix the issues above and try again."
+  exit 1
+fi
