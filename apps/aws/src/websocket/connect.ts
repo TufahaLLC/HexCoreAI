@@ -17,7 +17,7 @@ import {
   YEAR_START_DAY,
   YEAR_START_MONTH,
 } from "../shared/constants";
-import { getMatchIds } from "../shared/riot-api";
+import { getAccountByRiotId, getMatchIds } from "../shared/riot-api";
 import {
   type ConnectionParams,
   connectionParamsSchema,
@@ -40,7 +40,25 @@ const persistenceStore = new DynamoDBPersistenceLayer({
 // Idempotent function to prevent duplicate match enqueueing on reconnect
 const enqueueMatchesIdempotent = makeIdempotent(
   async (params: ConnectionParams) => {
-    const { sessionId, puuid, region, year } = params;
+    const { sessionId, gameName, tagLine, region, year } = params;
+
+    // First fetch PUUID using gameName and tagLine
+    logger.info("Fetching PUUID from Riot ID", {
+      gameName,
+      tagLine,
+      region,
+      correlationId: sessionId,
+    });
+
+    const accountData = await getAccountByRiotId(region, gameName, tagLine);
+    const puuid = accountData.puuid;
+
+    logger.info("Successfully fetched PUUID", {
+      puuid,
+      gameName,
+      tagLine,
+      correlationId: sessionId,
+    });
 
     logger.info("Fetching Ranked Solo/Duo match IDs", {
       puuid,
@@ -119,11 +137,17 @@ export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event) => {
   try {
     // Validate query parameters using Zod schema
     const validatedParams = connectionParamsSchema.parse(queryParams);
-    const { sessionId, puuid, region, year } = validatedParams;
+    const { sessionId, gameName, tagLine, region, year } = validatedParams;
+
+    // Fetch PUUID using gameName and tagLine
+    const accountData = await getAccountByRiotId(region, gameName, tagLine);
+    const puuid = accountData.puuid;
 
     logger.info("Connection parameters validated", {
       connectionId,
       sessionId,
+      gameName,
+      tagLine,
       puuid,
       region,
       year,
@@ -140,6 +164,8 @@ export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event) => {
           connectionId,
           sessionId,
           puuid,
+          gameName,
+          tagLine,
           connectedAt: Date.now(),
           ttl,
         },
@@ -150,6 +176,8 @@ export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event) => {
       connectionId,
       sessionId,
       puuid,
+      gameName,
+      tagLine,
       correlationId: sessionId,
     });
 

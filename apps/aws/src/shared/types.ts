@@ -107,6 +107,12 @@ export type RiotSummonerResponse = {
   summonerLevel: number;
 };
 
+export type RiotAccountResponse = {
+  puuid: string;
+  gameName: string;
+  tagLine: string;
+};
+
 export type RiotLeagueEntry = {
   leagueId: string;
   queueType: string;

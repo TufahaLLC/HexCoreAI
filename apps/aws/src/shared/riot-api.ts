@@ -20,6 +20,7 @@ import {
 import type {
   ItemPurchase,
   MatchData,
+  RiotAccountResponse,
   RiotLeagueEntry,
   RiotMatchResponse,
   RiotSummonerResponse,
@@ -174,6 +175,18 @@ export function getSummonerByPuuid(
 ): Promise<RiotSummonerResponse> {
   const url = `https://${region}.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/${puuid}`;
   return makeRequestWithRetry<RiotSummonerResponse>(url);
+}
+
+/**
+ * Get account data (including PUUID) by Riot ID (gameName and tagLine)
+ */
+export function getAccountByRiotId(
+  region: string,
+  gameName: string,
+  tagLine: string
+): Promise<RiotAccountResponse> {
+  const url = `https://${region}.api.riotgames.com/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(gameName)}/${encodeURIComponent(tagLine)}`;
+  return makeRequestWithRetry<RiotAccountResponse>(url);
 }
 
 /**

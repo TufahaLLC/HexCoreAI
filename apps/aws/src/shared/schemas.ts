@@ -36,7 +36,8 @@ import {
  */
 export const connectionParamsSchema = z.object({
   sessionId: z.string().uuid("Session ID must be a valid UUID"),
-  puuid: z.string().min(MIN_ARRAY_LENGTH, "PUUID is required"),
+  gameName: z.string().min(MIN_ARRAY_LENGTH, "Game name is required"),
+  tagLine: z.string().min(MIN_ARRAY_LENGTH, "Tag line is required"),
   region: z.enum(REGIONS, {
     errorMap: () => ({ message: "Region must be americas, europe, or asia" }),
   }),
