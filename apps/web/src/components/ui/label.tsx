@@ -1,4 +1,7 @@
-import { Label as LabelPrimitive } from "radix-ui";
+"use client";
+
+// biome-ignore lint/performance/noNamespaceImport: shadcn UI component uses namespace imports
+import * as LabelPrimitive from "@radix-ui/react-label";
 import type * as React from "react";
 
 import { cn } from "@/lib/utils";
