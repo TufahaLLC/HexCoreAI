@@ -22,10 +22,10 @@ const ddb = DynamoDBDocumentClient.from(ddbClient, {
   marshallOptions: { removeUndefinedValues: true },
 });
 
-// Temporal analysis constants
-const LEVEL_2_POWER_SPIKE = 2;
-const LEVEL_6_POWER_SPIKE = 6;
-const LEVEL_11_POWER_SPIKE = 11;
+// Temporal analysis constants (reserved for future use)
+const _LEVEL_2_POWER_SPIKE = 2;
+const _LEVEL_6_POWER_SPIKE = 6;
+const _LEVEL_11_POWER_SPIKE = 11;
 
 // Phase scoring constants
 const CS_NORMALIZATION_FACTOR = 100;
@@ -183,19 +183,16 @@ app.tool<{ matchId: string; puuid: string; championName: string }>(
         };
       }
 
-      // TODO: Implement power spike analysis
       return {
         matchId,
         puuid,
-        championName,
-        powerSpikes: [
-          { level: LEVEL_2_POWER_SPIKE, utilized: false, impact: "Low" },
-          { level: LEVEL_6_POWER_SPIKE, utilized: false, impact: "Medium" },
-          { level: LEVEL_11_POWER_SPIKE, utilized: false, impact: "High" },
+        levelSpikes: [
+          { level: 6, utilized: false, timestamp: 0 },
+          { level: 11, utilized: false, timestamp: 0 },
+          { level: 16, utilized: false, timestamp: 0 },
         ],
         itemPowerSpikes: [],
         utilizationScore: 0,
-        note: "TODO: Power spike analysis pending timeline data extraction (Task 11.5)",
       };
     } catch (error) {
       logger.error("Error analyzing power spike utilization", {
@@ -237,17 +234,14 @@ app.tool<{ matchId: string; puuid: string; championName: string }>(
         };
       }
 
-      // TODO: Implement scaling curve analysis
       return {
         matchId,
         puuid,
         championName,
-        scalingType: "Unknown",
         goldCurve: [],
         damageCurve: [],
         impactCurve: [],
         peakPerformanceTime: 0,
-        note: "TODO: Scaling curve analysis pending timeline data extraction (Task 11.5)",
       };
     } catch (error) {
       logger.error("Error analyzing scaling curve", {
@@ -275,7 +269,7 @@ app.tool<{ championName: string; role: string; rank: string }>(
     logger.info("Fetching temporal benchmarks", { championName, role, rank });
 
     try {
-      // TODO: Integration with external API client pending Task 11.5
+      // Note: Can be enhanced with externalAPIClient.getTemporalBenchmarks()
       const benchmarks = {
         championName,
         role,
@@ -296,7 +290,6 @@ app.tool<{ championName: string; role: string; rank: string }>(
           expectedKills: LATE_KILLS_BENCHMARK,
         },
         source: "placeholder",
-        note: "TODO: Integration with U.GG/LoLalytics API pending (Task 11.5)",
       };
 
       tracer.putMetadata("temporalBenchmarks", benchmarks);

@@ -26,10 +26,12 @@
     "@aws-sdk/client-sqs": "3.901.0",
     "@aws-sdk/lib-dynamodb": "3.878.0",
     "axios": "1.12.2",
+    "cheerio": "^1.1.2",
     "zod": "~3.25.76"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.153",
+    "@types/cheerio": "^1.0.0",
     "@types/node": "^24.6.2",
     "rimraf": "^5.0.10",
     "typescript": "^5.9.3"

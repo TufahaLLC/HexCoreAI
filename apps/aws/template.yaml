@@ -727,7 +727,7 @@ Resources:
   BuildAnalysisAgentProdAlias:
     Type: AWS::Bedrock::AgentAlias
     Condition: CreateAliases
-    DependsOn: AgentPreparationCustomResource
+    # DependsOn: AgentPreparationCustomResource
     Properties:
       AgentId: !GetAtt BuildAnalysisAgent.AgentId
       AgentAliasName: prod
@@ -736,7 +736,7 @@ Resources:
   BuildAnalysisAgentTestAlias:
     Type: AWS::Bedrock::AgentAlias
     Condition: CreateAliases
-    DependsOn: AgentPreparationCustomResource
+    # DependsOn: AgentPreparationCustomResource
     Properties:
       AgentId: !GetAtt BuildAnalysisAgent.AgentId
       AgentAliasName: test
@@ -765,7 +765,7 @@ Resources:
   CombatAnalysisAgentProdAlias:
     Type: AWS::Bedrock::AgentAlias
     Condition: CreateAliases
-    DependsOn: AgentPreparationCustomResource
+    # DependsOn: AgentPreparationCustomResource
     Properties:
       AgentId: !GetAtt CombatAnalysisAgent.AgentId
       AgentAliasName: prod
@@ -774,7 +774,7 @@ Resources:
   CombatAnalysisAgentTestAlias:
     Type: AWS::Bedrock::AgentAlias
     Condition: CreateAliases
-    DependsOn: AgentPreparationCustomResource
+    # DependsOn: AgentPreparationCustomResource
     Properties:
       AgentId: !GetAtt CombatAnalysisAgent.AgentId
       AgentAliasName: test
@@ -803,7 +803,7 @@ Resources:
   VisionAnalysisAgentProdAlias:
     Type: AWS::Bedrock::AgentAlias
     Condition: CreateAliases
-    DependsOn: AgentPreparationCustomResource
+    # DependsOn: AgentPreparationCustomResource
     Properties:
       AgentId: !GetAtt VisionAnalysisAgent.AgentId
       AgentAliasName: prod
@@ -812,7 +812,7 @@ Resources:
   VisionAnalysisAgentTestAlias:
     Type: AWS::Bedrock::AgentAlias
     Condition: CreateAliases
-    DependsOn: AgentPreparationCustomResource
+    # DependsOn: AgentPreparationCustomResource
     Properties:
       AgentId: !GetAtt VisionAnalysisAgent.AgentId
       AgentAliasName: test
@@ -841,7 +841,7 @@ Resources:
   EconomyAnalysisAgentProdAlias:
     Type: AWS::Bedrock::AgentAlias
     Condition: CreateAliases
-    DependsOn: AgentPreparationCustomResource
+    # DependsOn: AgentPreparationCustomResource
     Properties:
       AgentId: !GetAtt EconomyAnalysisAgent.AgentId
       AgentAliasName: prod
@@ -850,7 +850,7 @@ Resources:
   EconomyAnalysisAgentTestAlias:
     Type: AWS::Bedrock::AgentAlias
     Condition: CreateAliases
-    DependsOn: AgentPreparationCustomResource
+    # DependsOn: AgentPreparationCustomResource
     Properties:
       AgentId: !GetAtt EconomyAnalysisAgent.AgentId
       AgentAliasName: test
@@ -879,7 +879,7 @@ Resources:
   ChampionAnalysisAgentProdAlias:
     Type: AWS::Bedrock::AgentAlias
     Condition: CreateAliases
-    DependsOn: AgentPreparationCustomResource
+    # DependsOn: AgentPreparationCustomResource
     Properties:
       AgentId: !GetAtt ChampionAnalysisAgent.AgentId
       AgentAliasName: prod
@@ -888,7 +888,7 @@ Resources:
   ChampionAnalysisAgentTestAlias:
     Type: AWS::Bedrock::AgentAlias
     Condition: CreateAliases
-    DependsOn: AgentPreparationCustomResource
+    # DependsOn: AgentPreparationCustomResource
     Properties:
       AgentId: !GetAtt ChampionAnalysisAgent.AgentId
       AgentAliasName: test
@@ -917,7 +917,7 @@ Resources:
   CompetitiveAnalysisAgentProdAlias:
     Type: AWS::Bedrock::AgentAlias
     Condition: CreateAliases
-    DependsOn: AgentPreparationCustomResource
+    # DependsOn: AgentPreparationCustomResource
     Properties:
       AgentId: !GetAtt CompetitiveAnalysisAgent.AgentId
       AgentAliasName: prod
@@ -926,7 +926,7 @@ Resources:
   CompetitiveAnalysisAgentTestAlias:
     Type: AWS::Bedrock::AgentAlias
     Condition: CreateAliases
-    DependsOn: AgentPreparationCustomResource
+    # DependsOn: AgentPreparationCustomResource
     Properties:
       AgentId: !GetAtt CompetitiveAnalysisAgent.AgentId
       AgentAliasName: test
@@ -956,7 +956,7 @@ Resources:
   MacroAnalysisAgentProdAlias:
     Type: AWS::Bedrock::AgentAlias
     Condition: CreateAliases
-    DependsOn: AgentPreparationCustomResource
+    # DependsOn: AgentPreparationCustomResource
     Properties:
       AgentId: !GetAtt MacroAnalysisAgent.AgentId
       AgentAliasName: prod
@@ -965,7 +965,7 @@ Resources:
   MacroAnalysisAgentTestAlias:
     Type: AWS::Bedrock::AgentAlias
     Condition: CreateAliases
-    DependsOn: AgentPreparationCustomResource
+    # DependsOn: AgentPreparationCustomResource
     Properties:
       AgentId: !GetAtt MacroAnalysisAgent.AgentId
       AgentAliasName: test
@@ -994,7 +994,7 @@ Resources:
   PositioningAnalysisAgentProdAlias:
     Type: AWS::Bedrock::AgentAlias
     Condition: CreateAliases
-    DependsOn: AgentPreparationCustomResource
+    # DependsOn: AgentPreparationCustomResource
     Properties:
       AgentId: !GetAtt PositioningAnalysisAgent.AgentId
       AgentAliasName: prod
@@ -1003,7 +1003,7 @@ Resources:
   PositioningAnalysisAgentTestAlias:
     Type: AWS::Bedrock::AgentAlias
     Condition: CreateAliases
-    DependsOn: AgentPreparationCustomResource
+    # DependsOn: AgentPreparationCustomResource
     Properties:
       AgentId: !GetAtt PositioningAnalysisAgent.AgentId
       AgentAliasName: test
@@ -1032,7 +1032,7 @@ Resources:
   TemporalAnalysisAgentProdAlias:
     Type: AWS::Bedrock::AgentAlias
     Condition: CreateAliases
-    DependsOn: AgentPreparationCustomResource
+    # DependsOn: AgentPreparationCustomResource
     Properties:
       AgentId: !GetAtt TemporalAnalysisAgent.AgentId
       AgentAliasName: prod
@@ -1041,7 +1041,7 @@ Resources:
   TemporalAnalysisAgentTestAlias:
     Type: AWS::Bedrock::AgentAlias
     Condition: CreateAliases
-    DependsOn: AgentPreparationCustomResource
+    # DependsOn: AgentPreparationCustomResource
     Properties:
       AgentId: !GetAtt TemporalAnalysisAgent.AgentId
       AgentAliasName: test
@@ -1070,7 +1070,7 @@ Resources:
   SynergyAnalysisAgentProdAlias:
     Type: AWS::Bedrock::AgentAlias
     Condition: CreateAliases
-    DependsOn: AgentPreparationCustomResource
+    # DependsOn: AgentPreparationCustomResource
     Properties:
       AgentId: !GetAtt SynergyAnalysisAgent.AgentId
       AgentAliasName: prod
@@ -1079,7 +1079,7 @@ Resources:
   SynergyAnalysisAgentTestAlias:
     Type: AWS::Bedrock::AgentAlias
     Condition: CreateAliases
-    DependsOn: AgentPreparationCustomResource
+    # DependsOn: AgentPreparationCustomResource
     Properties:
       AgentId: !GetAtt SynergyAnalysisAgent.AgentId
       AgentAliasName: test
@@ -1108,7 +1108,7 @@ Resources:
   AdaptationAnalysisAgentProdAlias:
     Type: AWS::Bedrock::AgentAlias
     Condition: CreateAliases
-    DependsOn: AgentPreparationCustomResource
+    # DependsOn: AgentPreparationCustomResource
     Properties:
       AgentId: !GetAtt AdaptationAnalysisAgent.AgentId
       AgentAliasName: prod
@@ -1117,51 +1117,102 @@ Resources:
   AdaptationAnalysisAgentTestAlias:
     Type: AWS::Bedrock::AgentAlias
     Condition: CreateAliases
-    DependsOn: AgentPreparationCustomResource
+    # DependsOn: AgentPreparationCustomResource
     Properties:
       AgentId: !GetAtt AdaptationAnalysisAgent.AgentId
       AgentAliasName: test
       Description: Testing alias for Adaptation Analysis Agent
 
   # ==================== Agent Preparation Custom Resource ====================
-  AgentPreparationFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: HexCore-AgentPreparation
-      Handler: agent-preparation.handler
-      CodeUri: ./dist
-      Timeout: 300
-      MemorySize: 256
-      Environment:
-        Variables:
-          LOG_LEVEL: INFO
-      Policies:
-        - Statement:
-            - Effect: Allow
-              Action:
-                - bedrock:PrepareAgent
-                - bedrock:GetAgent
-                - bedrock:ListAgentVersions
-              Resource: !Sub "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:agent/*"
+  #AgentPreparationFunction:
+  #Type: AWS::Serverless::Function
+  #   Properties:
+  #     FunctionName: HexCore-AgentPreparation
+  #     Handler: agent-preparation.handler
+  #     CodeUri: ./dist
+  #     Timeout: 900
+  #     MemorySize: 256
+  #     Environment:
+  #       Variables:
+  #         LOG_LEVEL: INFO
+  #     Policies:
+  #       - Statement:
+  #         - Effect: Allow
+  #           Action:
+  #             - bedrock:PrepareAgent
+  #             - bedrock:GetAgent
+  #             - bedrock:GetAgentVersion
+  #             - bedrock:ListAgentVersions
+  #             - bedrock:CreateAgentActionGroup
+  #             - bedrock:UpdateAgentActionGroup
+  #             - bedrock:GetAgentActionGroup
+  #             - bedrock:ListAgentActionGroups
+  #             - bedrock:DeleteAgentActionGroup
+  #           Resource:
+  #             - !Sub "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:agent/*"
+  #             - !Sub "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:agent-version/*"
 
-  AgentPreparationCustomResource:
-    Type: AWS::CloudFormation::CustomResource
-    Condition: CreateAliases
-    Properties:
-      ServiceToken: !GetAtt AgentPreparationFunction.Arn
-      AgentIds:
-        - !GetAtt BuildAnalysisAgent.AgentId
-        - !GetAtt CombatAnalysisAgent.AgentId
-        - !GetAtt VisionAnalysisAgent.AgentId
-        - !GetAtt EconomyAnalysisAgent.AgentId
-        - !GetAtt ChampionAnalysisAgent.AgentId
-        - !GetAtt CompetitiveAnalysisAgent.AgentId
-        - !GetAtt MacroAnalysisAgent.AgentId
-        - !GetAtt PositioningAnalysisAgent.AgentId
-        - !GetAtt TemporalAnalysisAgent.AgentId
-        - !GetAtt SynergyAnalysisAgent.AgentId
-        - !GetAtt AdaptationAnalysisAgent.AgentId
-
+  # AgentPreparationCustomResource:
+  #   Type: AWS::CloudFormation::CustomResource
+  #   DependsOn:
+  #     - BuildAgentActionGroupPermission
+  #     - CombatAgentActionGroupPermission
+  #     - VisionAgentActionGroupPermission
+  #     - EconomyAgentActionGroupPermission
+  #     - ChampionAgentActionGroupPermission
+  #     - CompetitiveAgentActionGroupPermission
+  #     - MacroAgentActionGroupPermission
+  #     - PositioningAgentActionGroupPermission
+  #     - TemporalAgentActionGroupPermission
+  #     - SynergyAgentActionGroupPermission
+  #     - AdaptationAgentActionGroupPermission
+  #   Properties:
+  #     ServiceToken: !GetAtt AgentPreparationFunction.Arn
+  #     AgentConfigs:
+  #       - AgentId: !GetAtt BuildAnalysisAgent.AgentId
+  #         AgentName: BuildAnalysis
+  #         ActionGroupName: build-tools
+  #         LambdaArn: !GetAtt BuildAgentActionGroupFunction.Arn
+  #       - AgentId: !GetAtt CombatAnalysisAgent.AgentId
+  #         AgentName: CombatAnalysis
+  #         ActionGroupName: combat-tools
+  #         LambdaArn: !GetAtt CombatAgentActionGroupFunction.Arn
+  #       - AgentId: !GetAtt VisionAnalysisAgent.AgentId
+  #         AgentName: VisionAnalysis
+  #         ActionGroupName: vision-tools
+  #         LambdaArn: !GetAtt VisionAgentActionGroupFunction.Arn
+  #       - AgentId: !GetAtt EconomyAnalysisAgent.AgentId
+  #         AgentName: EconomyAnalysis
+  #         ActionGroupName: economy-tools
+  #         LambdaArn: !GetAtt EconomyAgentActionGroupFunction.Arn
+  #       - AgentId: !GetAtt ChampionAnalysisAgent.AgentId
+  #         AgentName: ChampionAnalysis
+  #         ActionGroupName: champion-tools
+  #         LambdaArn: !GetAtt ChampionAgentActionGroupFunction.Arn
+  #       - AgentId: !GetAtt CompetitiveAnalysisAgent.AgentId
+  #         AgentName: CompetitiveAnalysis
+  #         ActionGroupName: competitive-tools
+  #         LambdaArn: !GetAtt CompetitiveAgentActionGroupFunction.Arn
+  #       - AgentId: !GetAtt MacroAnalysisAgent.AgentId
+  #         AgentName: MacroAnalysis
+  #         ActionGroupName: macro-tools
+  #         LambdaArn: !GetAtt MacroAgentActionGroupFunction.Arn
+  #       - AgentId: !GetAtt PositioningAnalysisAgent.AgentId
+  #         AgentName: PositioningAnalysis
+  #         ActionGroupName: positioning-tools
+  #         LambdaArn: !GetAtt PositioningAgentActionGroupFunction.Arn
+  #       - AgentId: !GetAtt TemporalAnalysisAgent.AgentId
+  #         AgentName: TemporalAnalysis
+  #         ActionGroupName: temporal-tools
+  #         LambdaArn: !GetAtt TemporalAgentActionGroupFunction.Arn
+  #       - AgentId: !GetAtt SynergyAnalysisAgent.AgentId
+  #         AgentName: SynergyAnalysis
+  #         ActionGroupName: synergy-tools
+  #         LambdaArn: !GetAtt SynergyAgentActionGroupFunction.Arn
+  #       - AgentId: !GetAtt AdaptationAnalysisAgent.AgentId
+  #         AgentName: AdaptationAnalysis
+  #         ActionGroupName: adaptation-tools
+  #         LambdaArn: !GetAtt AdaptationAgentActionGroupFunction.Arn
   # ==================== Agent Orchestrator Lambda Functions ====================
   BuildAgentOrchestratorFunction:
     Type: AWS::Serverless::Function
@@ -1781,8 +1832,6 @@ Resources:
         Destinations:
           - CloudWatchLogsLogGroup:
               LogGroupArn: !GetAtt StateMachineLogGroup.Arn
-    DependsOn:
-      - StateMachineLogGroup
 
   StateMachineLogGroup:
     Type: AWS::Logs::LogGroup

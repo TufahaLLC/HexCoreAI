@@ -23,6 +23,7 @@ import type {
   RiotAccountResponse,
   RiotLeagueEntry,
   RiotMatchResponse,
+  RiotRegionResponse,
   RiotSummonerResponse,
   RiotTimelineResponse,
 } from "./types";
@@ -168,12 +169,14 @@ export function getMatchTimeline(
 
 /**
  * Get summoner data by PUUID
+ * Dynamically fetches the active region for the PUUID
  */
-export function getSummonerByPuuid(
-  region: string,
+export async function getSummonerByPuuid(
+  routingRegion: string,
   puuid: string
 ): Promise<RiotSummonerResponse> {
-  const url = `https://${region}.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/${puuid}`;
+  const activeRegion = await getRegionByPuuid(routingRegion, puuid);
+  const url = `https://${activeRegion}.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/${puuid}`;
   return makeRequestWithRetry<RiotSummonerResponse>(url);
 }
 
@@ -190,10 +193,28 @@ export function getAccountByRiotId(
 }
 
 /**
- * Fetch summoner rank data from Riot API
+ * Get the active region for a PUUID
  */
-export async function getSummonerRank(region: string, summonerId: string) {
-  const url = `https://${region}.api.riotgames.com/lol/league/v4/entries/by-summoner/${summonerId}`;
+export async function getRegionByPuuid(
+  routingRegion: string,
+  puuid: string
+): Promise<string> {
+  const url = `https://${routingRegion}.api.riotgames.com/riot/account/v1/region/by-game/lol/by-puuid/${puuid}`;
+  const response = await makeRequestWithRetry<RiotRegionResponse>(url);
+  return response.region;
+}
+
+/**
+ * Fetch summoner rank data from Riot API
+ * Dynamically fetches the active region for the PUUID
+ */
+export async function getSummonerRank(
+  routingRegion: string,
+  puuid: string,
+  summonerId: string
+) {
+  const activeRegion = await getRegionByPuuid(routingRegion, puuid);
+  const url = `https://${activeRegion}.api.riotgames.com/lol/league/v4/entries/by-summoner/${summonerId}`;
   const entries: RiotLeagueEntry[] = await makeRequestWithRetry(url);
 
   // Find ranked solo/duo entry

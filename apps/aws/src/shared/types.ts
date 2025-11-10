@@ -113,6 +113,12 @@ export type RiotAccountResponse = {
   tagLine: string;
 };
 
+export type RiotRegionResponse = {
+  puuid: string;
+  game: string;
+  region: string;
+};
+
 export type RiotLeagueEntry = {
   leagueId: string;
   queueType: string;

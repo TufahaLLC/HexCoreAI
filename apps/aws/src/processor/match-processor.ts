@@ -66,7 +66,7 @@ const processMatchIdempotent = makeIdempotent(
       // Fetch rank data (not parallelized because it needs summonerId)
       let rankData: RankInfoData;
       try {
-        rankData = await getSummonerRank(region, summonerData.id);
+        rankData = await getSummonerRank(region, puuid, summonerData.id);
       } catch (rankError) {
         logger.warn("Failed to fetch rank data, using default", {
           error: rankError,

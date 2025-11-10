@@ -1,8 +1,21 @@
 /**
  * HexCore AI - Synthesizer Lambda Function
  *
- * This function aggregates all agent analysis results from Phase 7, persists them to S3 and DynamoDB,
+ * This function aggregates all agent analysis results from all orchestrators, persists them to S3 and DynamoDB,
  * and delivers the final synthesis to the client via WebSocket.
+ *
+ * Supported Agents (11 total):
+ * - BuildAgent: Build optimization and itemization analysis
+ * - CombatAgent: Combat effectiveness and teamfight analysis
+ * - VisionAgent: Vision control and map awareness analysis
+ * - EconomyAgent: Economic efficiency and farming analysis
+ * - ChampionAgent: Champion proficiency and mechanics analysis
+ * - CompetitiveAgent: Competitive progression and ranking analysis
+ * - MacroAgent: Macro strategy and objective control analysis
+ * - PositioningAgent: Tactical positioning and spacing analysis
+ * - TemporalAgent: Game timing and power spike analysis
+ * - SynergyAgent: Team synergy and coordination analysis
+ * - AdaptationAgent: Strategic adaptation and flexibility analysis
  *
  * Phase 8 Implementation:
  * - Task 8.1: Infrastructure scaffolding (this file)
@@ -129,22 +142,48 @@ const STRENGTH_INDICATORS: Record<
   { keywords: string[]; label: string }
 > = {
   BuildAgent: {
-    keywords: ["efficient", "optimal"],
+    keywords: ["efficient", "optimal", "itemization"],
     label: "Build optimization",
   },
-  VisionAgent: { keywords: ["vision", "ward"], label: "Vision control" },
-  EconomyAgent: { keywords: ["cs", "gold"], label: "Economic efficiency" },
+  VisionAgent: {
+    keywords: ["vision", "ward", "map control"],
+    label: "Vision control",
+  },
+  EconomyAgent: {
+    keywords: ["cs", "gold", "farming"],
+    label: "Economic efficiency",
+  },
   CombatAgent: {
-    keywords: ["teamfight", "damage"],
+    keywords: ["teamfight", "damage", "kda"],
     label: "Combat effectiveness",
   },
   ChampionAgent: {
-    keywords: ["mastery", "champion"],
+    keywords: ["mastery", "champion", "mechanics"],
     label: "Champion proficiency",
   },
   CompetitiveAgent: {
-    keywords: ["rank", "climb"],
+    keywords: ["rank", "climb", "mmr"],
     label: "Competitive progression",
+  },
+  MacroAgent: {
+    keywords: ["objective", "rotation", "map pressure"],
+    label: "Macro strategy",
+  },
+  PositioningAgent: {
+    keywords: ["positioning", "spacing", "safety"],
+    label: "Tactical positioning",
+  },
+  TemporalAgent: {
+    keywords: ["timing", "power spike", "tempo"],
+    label: "Game timing",
+  },
+  SynergyAgent: {
+    keywords: ["synergy", "teamwork", "coordination"],
+    label: "Team synergy",
+  },
+  AdaptationAgent: {
+    keywords: ["adaptation", "flexibility", "pivot"],
+    label: "Strategic adaptation",
   },
 };
 
@@ -176,13 +215,50 @@ const IMPROVEMENT_INDICATORS: Record<
   string,
   { keywords: string[]; label: string }
 > = {
-  BuildAgent: { keywords: ["improve", "better"], label: "Build adaptation" },
+  BuildAgent: {
+    keywords: ["improve", "better", "suboptimal"],
+    label: "Build adaptation",
+  },
   CombatAgent: {
-    keywords: ["positioning", "engage"],
+    keywords: ["positioning", "engage", "deaths"],
     label: "Combat positioning",
   },
-  VisionAgent: { keywords: ["more", "better"], label: "Vision coverage" },
-  EconomyAgent: { keywords: ["farm", "cs"], label: "Farming efficiency" },
+  VisionAgent: {
+    keywords: ["more", "better", "lack"],
+    label: "Vision coverage",
+  },
+  EconomyAgent: {
+    keywords: ["farm", "cs", "behind"],
+    label: "Farming efficiency",
+  },
+  ChampionAgent: {
+    keywords: ["practice", "mechanics", "execution"],
+    label: "Champion mechanics",
+  },
+  CompetitiveAgent: {
+    keywords: ["consistency", "tilt", "mental"],
+    label: "Competitive mindset",
+  },
+  MacroAgent: {
+    keywords: ["objective", "rotation", "priority"],
+    label: "Macro decision-making",
+  },
+  PositioningAgent: {
+    keywords: ["overextend", "caught", "spacing"],
+    label: "Positioning discipline",
+  },
+  TemporalAgent: {
+    keywords: ["timing", "early", "late"],
+    label: "Power spike timing",
+  },
+  SynergyAgent: {
+    keywords: ["teamwork", "communication", "coordination"],
+    label: "Team coordination",
+  },
+  AdaptationAgent: {
+    keywords: ["rigid", "inflexible", "adjust"],
+    label: "Strategic flexibility",
+  },
 };
 
 const FAILED_AGENT_LABELS: Record<string, string> = {
@@ -192,6 +268,11 @@ const FAILED_AGENT_LABELS: Record<string, string> = {
   EconomyAgent: "Economic analysis",
   ChampionAgent: "Champion analysis",
   CompetitiveAgent: "Competitive analysis",
+  MacroAgent: "Macro analysis",
+  PositioningAgent: "Positioning analysis",
+  TemporalAgent: "Temporal analysis",
+  SynergyAgent: "Synergy analysis",
+  AdaptationAgent: "Adaptation analysis",
 };
 
 /**

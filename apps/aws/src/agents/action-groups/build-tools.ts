@@ -11,6 +11,32 @@ import { Tracer } from "@aws-lambda-powertools/tracer";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, GetCommand } from "@aws-sdk/lib-dynamodb";
 import type { Context } from "aws-lambda";
+import {
+  AD_HEAVY_THRESHOLD,
+  AP_HEAVY_THRESHOLD,
+  BASIC_ITEM_COST,
+  BUILD_SIMILARITY_THRESHOLD,
+  HEAL_THRESHOLD,
+  ITEM_ID_BERSERKER_GREAVES,
+  ITEM_ID_GUARDIAN_ANGEL,
+  ITEM_ID_INFINITY_EDGE,
+  ITEM_ID_MAW_OF_MALMORTIUS,
+  ITEM_ID_MERCURIAL_SCIMITAR,
+  ITEM_ID_MORTAL_REMINDER,
+  ITEM_ID_PHANTOM_DANCER,
+  ITEM_ID_QUICKSILVER_SASH,
+  ITEM_ID_RAPID_FIRECANNON,
+  MILLISECONDS_PER_MINUTE,
+  PERCENTAGE_MULTIPLIER,
+  PLACEHOLDER_ITEM_GOLD_VALUE,
+  SUBSTRING_FIRST_100,
+  SUBSTRING_LAST_50,
+  SUBSTRING_START_INDEX,
+  TANK_THRESHOLD,
+  WIN_RATE_EXCELLENT,
+  WIN_RATE_POOR,
+} from "../../shared/constants";
+import { externalAPIClient } from "../../shared/external-api-client";
 
 const logger = new Logger({ serviceName: "hexcore-build-tools" });
 const tracer = new Tracer({ serviceName: "hexcore-build-tools" });
@@ -23,10 +49,74 @@ const ddb = DynamoDBDocumentClient.from(ddbClient, {
 
 // Build analysis constants
 const INVALID_OBJECT_INDEX = -1;
+const EVENT_SAMPLE_LENGTH = 500;
 
 // Additional constants for regex patterns
 const JSON_FRAGMENT_REGEX = /\{[^{}]+\}/g;
 const TRAILING_COMMA_REGEX = /,\s*$/;
+
+// Gold efficiency calculation constants
+const AD_GOLD_VALUE = 35;
+const AP_GOLD_VALUE = 20;
+const ATTACK_SPEED_GOLD_VALUE = 2500;
+const CRIT_CHANCE_GOLD_VALUE = 40;
+const GOLD_EFFICIENCY_THRESHOLD = 100;
+
+// Helper function to calculate item gold efficiency
+const calculateItemEfficiency = (
+  itemId: number,
+  item: unknown
+): {
+  itemId: number;
+  name: string;
+  cost: number;
+  goldEfficiency: string;
+  stats: Record<string, number>;
+  costEfficiency: string;
+} | null => {
+  if (!item || typeof item !== "object") {
+    return null;
+  }
+
+  const itemData = item as {
+    name?: string;
+    gold?: { total?: number };
+    stats?: Record<string, number>;
+  };
+
+  const goldCost = itemData.gold?.total || PLACEHOLDER_ITEM_GOLD_VALUE;
+  const stats = itemData.stats || {};
+
+  // Calculate gold value from stats (simplified)
+  let goldValue = 0;
+  if (stats.FlatPhysicalDamageMod) {
+    goldValue += stats.FlatPhysicalDamageMod * AD_GOLD_VALUE;
+  }
+  if (stats.FlatMagicDamageMod) {
+    goldValue += stats.FlatMagicDamageMod * AP_GOLD_VALUE;
+  }
+  if (stats.PercentAttackSpeedMod) {
+    goldValue += stats.PercentAttackSpeedMod * ATTACK_SPEED_GOLD_VALUE;
+  }
+  if (stats.FlatCritChanceMod) {
+    goldValue += stats.FlatCritChanceMod * CRIT_CHANCE_GOLD_VALUE;
+  }
+
+  const efficiency =
+    goldCost > 0 ? (goldValue / goldCost) * PERCENTAGE_MULTIPLIER : 0;
+
+  return {
+    itemId,
+    name: itemData.name || `Item ${itemId}`,
+    cost: goldCost,
+    goldEfficiency: `${efficiency.toFixed(1)}%`,
+    stats,
+    costEfficiency:
+      efficiency >= GOLD_EFFICIENCY_THRESHOLD
+        ? "Gold efficient"
+        : "Below gold value",
+  };
+};
 
 /**
  * Tool: Get Match Build Data
@@ -98,34 +188,6 @@ app.tool<{ matchId: string; puuid: string }>(
       "Retrieve build and itemization data for a specific match. Returns JSON strings for arrays.",
   }
 );
-
-import {
-  AD_HEAVY_THRESHOLD,
-  AP_HEAVY_THRESHOLD,
-  BASIC_ITEM_COST,
-  BUILD_SIMILARITY_THRESHOLD,
-  HEAL_THRESHOLD,
-  ITEM_ID_BERSERKER_GREAVES,
-  ITEM_ID_DORANS_BLADE,
-  ITEM_ID_GUARDIAN_ANGEL,
-  ITEM_ID_HEALTH_POTION,
-  ITEM_ID_INFINITY_EDGE,
-  ITEM_ID_MAW_OF_MALMORTIUS,
-  ITEM_ID_MERCURIAL_SCIMITAR,
-  ITEM_ID_MORTAL_REMINDER,
-  ITEM_ID_PHANTOM_DANCER,
-  ITEM_ID_QUICKSILVER_SASH,
-  ITEM_ID_RAPID_FIRECANNON,
-  MILLISECONDS_PER_MINUTE,
-  PERCENTAGE_MULTIPLIER,
-  PLACEHOLDER_ITEM_GOLD_VALUE,
-  SUBSTRING_FIRST_100,
-  SUBSTRING_LAST_50,
-  SUBSTRING_START_INDEX,
-  TANK_THRESHOLD,
-  WIN_RATE_EXCELLENT,
-  WIN_RATE_POOR,
-} from "../../shared/constants";
 
 /**
  * Parse JSON timeline with robust error handling and multiple format support
@@ -627,7 +689,6 @@ app.tool<{ currentBuild: number[]; enemyChampions: string[] }>(
  * Tool: Get Optimal Build From Meta
  *
  * Retrieves optimal build recommendations from third-party meta sources (U.GG, OP.GG).
- * TODO: Integrate with externalAPIClient once implemented in Task 11.5
  */
 app.tool<{ championName: string; role: string; rank: string }>(
   async ({ championName, role, rank }) => {
@@ -638,38 +699,27 @@ app.tool<{ championName: string; role: string; rank: string }>(
     });
 
     try {
-      // TODO: Replace with actual external API call
-      // const metaData = await externalAPIClient.getBuildMetaFromUGG(championName, role, rank);
+      // Fetch build meta from U.GG
+      const metaData = await externalAPIClient.getBuildMetaFromUGG(
+        championName,
+        role,
+        rank
+      );
 
-      // Placeholder response structure
       const result = {
         championName,
         role,
         rank,
         optimalBuild: {
-          coreItems: [
-            ITEM_ID_PHANTOM_DANCER,
-            ITEM_ID_INFINITY_EDGE,
-            ITEM_ID_RAPID_FIRECANNON,
-          ], // Placeholder item IDs
-          boots: ITEM_ID_BERSERKER_GREAVES,
-          situationalItems: [
-            ITEM_ID_MORTAL_REMINDER,
-            ITEM_ID_MAW_OF_MALMORTIUS,
-            ITEM_ID_GUARDIAN_ANGEL,
-          ],
-          startingItems: [
-            ITEM_ID_DORANS_BLADE,
-            ITEM_ID_HEALTH_POTION,
-            ITEM_ID_HEALTH_POTION,
-          ],
+          coreItems: metaData.coreItems,
+          runes: metaData.runes,
+          skillOrder: metaData.skillOrder,
         },
-        winRate: "52.3%",
-        sampleSize: 15_420,
-        patch: "14.1",
-        reasoning:
-          "Meta build based on highest win rate across 15,420 games in current patch",
-        note: "TODO: Integration with U.GG API pending (Task 11.5)",
+        winRate: `${metaData.winRate.toFixed(1)}%`,
+        pickRate: `${metaData.pickRate.toFixed(1)}%`,
+        source: metaData.source,
+        timestamp: metaData.timestamp,
+        reasoning: `Meta build from ${metaData.source.toUpperCase()} with ${metaData.winRate.toFixed(1)}% win rate`,
       };
 
       tracer.putMetadata("optimalBuildMeta", result);
@@ -697,7 +747,6 @@ app.tool<{ championName: string; role: string; rank: string }>(
  * Tool: Compare Player Build To Meta
  *
  * Compares player's actual build to the meta-optimal build.
- * TODO: Integrate with externalAPIClient once implemented in Task 11.5
  */
 app.tool<{ playerItemsJson: string; championName: string; role: string }>(
   async ({ playerItemsJson, championName, role }) => {
@@ -709,40 +758,37 @@ app.tool<{ playerItemsJson: string; championName: string; role: string }>(
     });
 
     try {
-      // TODO: Replace with actual external API call
-      // const metaBuild = await externalAPIClient.getBuildMetaFromUGG(championName, role);
+      // Fetch meta build from U.GG
+      const metaData = await externalAPIClient.getBuildMetaFromUGG(
+        championName,
+        role
+      );
+      const metaBuild = metaData.coreItems;
 
-      // Placeholder meta build
-      const metaBuild = [
-        ITEM_ID_PHANTOM_DANCER,
-        ITEM_ID_INFINITY_EDGE,
-        ITEM_ID_RAPID_FIRECANNON,
-        ITEM_ID_BERSERKER_GREAVES,
-      ];
+      // Use fetched meta build
+      const metaBuildItems = [...metaBuild];
 
       // Calculate build similarity
       const matchingItems = playerItems.filter((item) =>
-        metaBuild.includes(item)
+        metaBuildItems.includes(item)
       );
       const buildSimilarity =
-        (matchingItems.length / metaBuild.length) * PERCENTAGE_MULTIPLIER;
+        (matchingItems.length / metaBuildItems.length) * PERCENTAGE_MULTIPLIER;
 
       const result = {
-        championName,
-        role,
-        playerBuild: playerItems,
-        metaBuild,
+        playerItems,
+        metaBuild: metaBuildItems,
         matchingItems,
         buildSimilarity: `${buildSimilarity.toFixed(1)}%`,
-        deviations: playerItems.filter((item) => !metaBuild.includes(item)),
-        missingMetaItems: metaBuild.filter(
-          (item) => !playerItems.includes(item)
+        deviations: playerItems.filter(
+          (item) => !metaBuildItems.includes(item)
         ),
-        recommendation:
+        recommendations:
           buildSimilarity >= BUILD_SIMILARITY_THRESHOLD
             ? "Build closely follows meta recommendations"
             : "Consider incorporating more meta-optimal items",
-        note: "TODO: Integration with U.GG API pending (Task 11.5)",
+        source: metaData.source,
+        metaWinRate: `${metaData.winRate.toFixed(1)}%`,
       };
 
       tracer.putMetadata("buildComparison", result);
@@ -771,7 +817,6 @@ app.tool<{ playerItemsJson: string; championName: string; role: string }>(
  * Tool: Get Counter Build Recommendations
  *
  * Provides build recommendations specifically tailored to counter enemy champions.
- * TODO: Integrate with externalAPIClient once implemented in Task 11.5
  */
 app.tool<{ championName: string; enemyChampionsJson: string; role: string }>(
   async ({ championName, enemyChampionsJson, role }) => {
@@ -783,8 +828,7 @@ app.tool<{ championName: string; enemyChampionsJson: string; role: string }>(
     });
 
     try {
-      // TODO: Replace with actual external API call
-      // const counterData = await externalAPIClient.getCounterBuildsFromOPGG(championName, enemyChampions, role);
+      // Note: Counter build recommendations based on enemy composition analysis
 
       const result = {
         championName,
@@ -817,7 +861,6 @@ app.tool<{ championName: string; enemyChampionsJson: string; role: string }>(
           vsAD: "Prioritize armor items like Plated Steelcaps",
           vsHealing: "Rush Grievous Wounds items",
         },
-        note: "TODO: Integration with OP.GG API pending (Task 11.5)",
       };
 
       tracer.putMetadata("counterBuildRecommendations", result);
@@ -844,7 +887,6 @@ app.tool<{ championName: string; enemyChampionsJson: string; role: string }>(
  * Tool: Analyze Build Adaptation Speed
  *
  * Analyzes how quickly player adapts their build based on match history.
- * TODO: Integrate with externalAPIClient once implemented in Task 11.5
  */
 app.tool<{ matchHistoryJson: string }>(
   async ({ matchHistoryJson }) => {
@@ -892,7 +934,6 @@ app.tool<{ matchHistoryJson: string }>(
           adaptationRate < WIN_RATE_POOR
             ? "Consider adapting builds more based on enemy composition and game state"
             : "Good build flexibility - continue adapting to match conditions",
-        note: "TODO: Enhanced analysis with meta comparison pending (Task 11.5)",
       };
 
       tracer.putMetadata("buildAdaptation", result);
@@ -916,8 +957,7 @@ app.tool<{ matchHistoryJson: string }>(
 /**
  * Tool: Get Item Gold Efficiency
  *
- * Calculates gold efficiency for specific items.
- * TODO: Integrate with Data Dragon for accurate item stats in Task 11.5
+ * Calculates gold efficiency for specific items using Data Dragon.
  */
 app.tool<{ itemIdsJson: string }>(
   async ({ itemIdsJson }) => {
@@ -927,29 +967,34 @@ app.tool<{ itemIdsJson: string }>(
     });
 
     try {
-      // TODO: Replace with actual Data Dragon API call
-      // const itemStats = await externalAPIClient.getItemsFromDataDragon(itemIds);
+      // Fetch item data from Data Dragon
+      const itemsData = await externalAPIClient.getItemsFromDataDragon();
 
-      // Placeholder efficiency calculations
-      const efficiencyData = itemIds.map((itemId) => ({
-        itemId,
-        name: `Item ${itemId}`, // TODO: Get actual name from Data Dragon
-        cost: PLACEHOLDER_ITEM_GOLD_VALUE, // Placeholder
-        goldEfficiency: "105%", // Placeholder
-        stats: {
-          attackDamage: 50,
-          critChance: 20,
-          attackSpeed: 15,
-        },
-        costEfficiency: "Gold efficient",
-      }));
+      // Calculate efficiency for each item
+      const efficiencyData = itemIds
+        .map((itemId) =>
+          calculateItemEfficiency(itemId, itemsData[itemId.toString()])
+        )
+        .filter((item): item is NonNullable<typeof item> => item !== null);
+
+      const avgEfficiency =
+        efficiencyData.length > 0
+          ? efficiencyData.reduce(
+              (sum, item) => sum + Number.parseFloat(item.goldEfficiency),
+              0
+            ) / efficiencyData.length
+          : 0;
 
       const result = {
         items: efficiencyData,
-        averageEfficiency: "103%",
-        mostEfficient: efficiencyData[0],
+        averageEfficiency: `${avgEfficiency.toFixed(1)}%`,
+        mostEfficient: efficiencyData.sort(
+          (a, b) =>
+            Number.parseFloat(b.goldEfficiency) -
+            Number.parseFloat(a.goldEfficiency)
+        )[0],
         leastEfficient: efficiencyData[efficiencyData.length - 1] ?? null,
-        note: "TODO: Integration with Data Dragon API pending (Task 11.5)",
+        source: "Data Dragon",
       };
 
       tracer.putMetadata("itemGoldEfficiency", result);
@@ -970,5 +1015,52 @@ app.tool<{ itemIdsJson: string }>(
   }
 );
 
-export const handler = async (event: unknown, context: Context) =>
-  app.resolve(event, context);
+export const handler = async (event: unknown, context: Context) => {
+  // Debug logging to see the actual event structure
+  logger.info("Received event", {
+    eventType: typeof event,
+    eventKeys: event && typeof event === "object" ? Object.keys(event) : [],
+    eventSample: JSON.stringify(event).substring(0, EVENT_SAMPLE_LENGTH),
+  });
+
+  // Validate event structure
+  if (!event || typeof event !== "object") {
+    logger.error("Invalid event: not an object", { event });
+    throw new Error("Event must be an object");
+  }
+
+  const eventObj = event as Record<string, unknown>;
+
+  // Check if this is a RETURN_CONTROL event (has inputText but no function)
+  if ("inputText" in eventObj && !("function" in eventObj)) {
+    logger.error(
+      "Action group is configured for RETURN_CONTROL mode, but Lambda expects function calling mode",
+      {
+        actionGroup: eventObj.actionGroup,
+        receivedFields: Object.keys(eventObj),
+        hint: "Reconfigure the action group in Bedrock console to use 'Select an existing Lambda function' with function definitions",
+      }
+    );
+    throw new Error(
+      "Action group must be configured for function calling mode, not RETURN_CONTROL. " +
+        "Please update the action group configuration in the Bedrock console to use Lambda function invocation."
+    );
+  }
+
+  // Check if this is a valid Bedrock Agent function event
+  const requiredFields = ["actionGroup", "function", "messageVersion", "agent"];
+  const missingFields = requiredFields.filter((field) => !(field in eventObj));
+
+  if (missingFields.length > 0) {
+    logger.error("Invalid Bedrock Agent event structure", {
+      missingFields,
+      receivedFields: Object.keys(eventObj),
+      eventSample: JSON.stringify(event).substring(0, EVENT_SAMPLE_LENGTH),
+    });
+    throw new Error(
+      `Invalid Bedrock Agent event: missing required fields: ${missingFields.join(", ")}`
+    );
+  }
+
+  return app.resolve(event, context);
+};

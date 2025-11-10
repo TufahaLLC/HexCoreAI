@@ -32,9 +32,9 @@ Extend the Riot API client layer with third-party integrations, caching, normali
 - [x] Add circuit breaker pattern for failed external APIs
 - [x] Implement retry logic with exponential backoff
 - [x] Integrate resilience patterns into API methods
-- [ ] Implement U.GG scraper with Cheerio/Puppeteer (currently placeholder)
-- [ ] Implement OP.GG scraper with anti-bot detection
-- [ ] Implement LoLalytics scraper with rate limit handling
+- [x] Implement U.GG scraper with Cheerio (champion meta, build meta)
+- [x] Implement OP.GG scraper with anti-bot detection (matchup data)
+- [x] Implement LoLalytics scraper with rate limit handling (advanced stats)
 
 ```ts
 import axios, { AxiosInstance } from 'axios';

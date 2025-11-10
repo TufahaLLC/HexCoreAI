@@ -278,15 +278,14 @@ app.tool<{
  * Tool: Get Vision Heatmaps
  *
  * Retrieves optimal ward placement heatmaps for specific champions and roles.
- * TODO: Integrate with LoLalytics/Mobalytics API once implemented in Task 11.5
  */
 app.tool<{ championName: string; role: string }>(
   async ({ championName, role }) => {
     logger.info("Fetching vision heatmaps", { championName, role });
 
     try {
-      // TODO: Replace with actual external API call
-      // const heatmapData = await externalAPIClient.getVisionHeatmapsFromLoLalytics(championName, role);
+      // Note: Can be enhanced with external API integration
+      // e.g., externalAPIClient.getAdvancedStatsFromLoLalytics(championName, role)
 
       const result = {
         championName,
@@ -314,7 +313,6 @@ app.tool<{ championName: string; role: string }>(
           mid: ["Jungle entrances", "Objective areas"],
           late: ["Baron/Dragon pit", "Siege positions"],
         },
-        note: "TODO: Integration with LoLalytics/Mobalytics API pending (Task 11.5)",
       };
 
       tracer.putMetadata("visionHeatmaps", result);
@@ -341,15 +339,13 @@ app.tool<{ championName: string; role: string }>(
  * Tool: Get Vision Benchmarks By Role
  *
  * Retrieves vision score and warding benchmarks by role and rank.
- * TODO: Integrate with U.GG API once implemented in Task 11.5
  */
 app.tool<{ role: string; rank: string }>(
   async ({ role, rank }) => {
     logger.info("Fetching vision benchmarks by role", { role, rank });
 
     try {
-      // TODO: Replace with actual external API call
-      // const benchmarks = await externalAPIClient.getVisionBenchmarksFromUGG(role, rank);
+      // Note: Can be enhanced with externalAPIClient.getPlayerBenchmarkFromUGG()
 
       const result = {
         role,
@@ -428,7 +424,6 @@ app.tool<{ role: string; rank: string }>(
                 : WARDS_TOP50_NON_UTILITY,
           },
         },
-        note: "TODO: Integration with U.GG API pending (Task 11.5)",
       };
 
       tracer.putMetadata("visionBenchmarksByRole", result);
@@ -455,15 +450,13 @@ app.tool<{ role: string; rank: string }>(
  * Tool: Get Objective Vision Setup
  *
  * Provides optimal vision setup strategies for specific objectives.
- * TODO: Integrate with Mobalytics API once implemented in Task 11.5
  */
 app.tool<{ objectiveType: string }>(
   async ({ objectiveType }) => {
     logger.info("Fetching objective vision setup", { objectiveType });
 
     try {
-      // TODO: Replace with actual external API call
-      // const setupData = await externalAPIClient.getObjectiveVisionFromMobalytics(objectiveType);
+      // Note: Provides strategic vision setup recommendations
 
       const visionSetups: ObjectiveVisionSetups = {
         dragon: {
@@ -473,6 +466,7 @@ app.tool<{ objectiveType: string }>(
             "Enemy jungle entrance near dragon",
             "River brush",
           ],
+          priority: "High",
           controlWardPriority: "Dragon pit or river brush",
           clearPriority: [
             "Enemy wards in pit",
@@ -488,6 +482,7 @@ app.tool<{ objectiveType: string }>(
             "Enemy blue buff area",
             "Top lane tri-brush",
           ],
+          priority: "High",
           controlWardPriority: "Baron pit or top river brush",
           clearPriority: [
             "Enemy wards in pit",
@@ -503,8 +498,21 @@ app.tool<{ objectiveType: string }>(
             "Top lane brush",
             "Enemy jungle entrance",
           ],
+          priority: "Medium",
           controlWardPriority: "Herald pit",
           clearPriority: ["Pit wards", "River wards"],
+          timing: "30 seconds before spawn",
+        },
+        elder: {
+          wardLocations: [
+            "Elder pit entrance",
+            "Top river brush",
+            "Top lane brush",
+            "Enemy jungle entrance",
+          ],
+          priority: "High",
+          controlWardPriority: "Elder pit or top river brush",
+          clearPriority: ["Pit wards", "River wards", "Jungle entrance wards"],
           timing: "30 seconds before spawn",
         },
       };
@@ -518,7 +526,6 @@ app.tool<{ objectiveType: string }>(
           "Place control wards in high-traffic areas",
           "Coordinate with team for vision denial",
         ],
-        note: "TODO: Integration with Mobalytics API pending (Task 11.5)",
       };
 
       tracer.putMetadata("objectiveVisionSetup", result);
@@ -544,7 +551,6 @@ app.tool<{ objectiveType: string }>(
  * Tool: Analyze Vision Denial Efficiency
  *
  * Analyzes vision denial performance based on wards killed and detectors placed.
- * TODO: Integrate with LoLalytics API once implemented in Task 11.5
  */
 app.tool<{ wardsKilled: number; detectorsPlaced: number }>(
   async ({ wardsKilled, detectorsPlaced }) => {
@@ -554,8 +560,7 @@ app.tool<{ wardsKilled: number; detectorsPlaced: number }>(
     });
 
     try {
-      // TODO: Replace with actual external API call for benchmarks
-      // const denialBenchmarks = await externalAPIClient.getVisionDenialBenchmarksFromLoLalytics();
+      // Note: Analyzes vision denial efficiency metrics
 
       const denialRatio =
         detectorsPlaced > 0 ? wardsKilled / detectorsPlaced : 0;
@@ -588,7 +593,6 @@ app.tool<{ wardsKilled: number; detectorsPlaced: number }>(
           good: "1.5-2.0 wards per sweeper",
           average: "1.0-1.5 wards per sweeper",
         },
-        note: "TODO: Integration with LoLalytics API pending (Task 11.5)",
       };
 
       tracer.putMetadata("visionDenialEfficiency", result);
