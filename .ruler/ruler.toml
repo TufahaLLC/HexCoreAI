@@ -24,9 +24,9 @@ args = ["-y", "mcp-remote", "https://www.ultracite.ai/api/mcp/mcp"]
 command = "uvx"
 args = ["awslabs.aws-documentation-mcp-server@latest"]
 
-# [mcp_servers.shadcn]
-# command = "npx"
-# args = ["shadcn@latest", "mcp"]
+[mcp_servers.shadcn]
+command = "npx"
+args = ["shadcn@latest", "mcp"]
 
 # --- Agent-Specific Configurations ---
 [agents.claude]
